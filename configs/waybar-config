@@ -1,0 +1,51 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 24,
+    "spacing": 0,
+    
+    "modules-left": ["sway/workspaces"],
+    "modules-center": ["clock"],
+    "modules-right": ["pulseaudio", "backlight", "network", "battery"],
+    
+    "sway/workspaces": {
+        "format": "{index}"
+    },
+    
+    "clock": {
+        "interval": 1,
+        "format": "{:%H:%M}",
+        "format-alt": "{:%H:%M:%S}",
+        "tooltip-format": "{:%H:%M:%S}\n{:%A, %d. %B %Y}"
+    },
+    
+    "battery": {
+        "format": "{capacity}%",
+        "format-charging": "{capacity}%+",
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+        "tooltip-format": "Akku: {capacity}%\n{timeTo}"
+    },
+    
+    "backlight": {
+        "format": "☀{percent}%",
+        "tooltip-format": "Helligkeit: {percent}%"
+    },
+    
+    "network": {
+        "format-wifi": "{essid}",
+        "format-ethernet": "{ipaddr}",
+        "format-disconnected": "Offline",
+        "tooltip-format-wifi": "WLAN: {essid}\nSignal: {signalStrength}%\nIP: {ipaddr}\nGateway: {gwaddr}",
+        "tooltip-format-ethernet": "LAN\nIP: {ipaddr}\nGateway: {gwaddr}",
+        "tooltip-format-disconnected": "Keine Verbindung"
+    },
+    
+    "pulseaudio": {
+        "format": "🔊{volume}%",
+        "format-muted": "🔇Stumm",
+        "tooltip-format": "Lautstärke: {volume}%\n{desc}"
+    }
+}

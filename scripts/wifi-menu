@@ -1,0 +1,41 @@
+#!/bin/bash
+
+LOCKFILE="/tmp/wifi-menu.lock"
+
+if [ -e "$LOCKFILE" ]; then
+    pkill wofi
+    rm "$LOCKFILE"
+    exit 0
+fi
+
+touch "$LOCKFILE"
+
+# Rescan vor Anzeige
+nmcli device wifi rescan 2>/dev/null
+sleep 1
+
+# Verfügbare WLANs mit besserer Formatierung
+networks=$(nmcli -t -f SSID,SIGNAL,SECURITY device wifi list | grep -v '^:' | awk -F':' '{if($1!="") print $1 " (" $2 "%)"}')
+
+if [ -z "$networks" ]; then
+    wofi --show dmenu --prompt "Keine WLANs gefunden"
+    rm "$LOCKFILE"
+    exit 0
+fi
+
+selected=$(echo "$networks" | wofi --show dmenu --prompt "WLAN wählen")
+
+rm "$LOCKFILE"
+
+if [ -n "$selected" ]; then
+    ssid=$(echo "$selected" | sed 's/ (.*//')
+    password=$(echo "" | wofi --show dmenu --prompt "Passwort für $ssid" --password)
+    
+    if [ -n "$password" ]; then
+        nmcli device wifi connect "$ssid" password "$password"
+        notify-send "WLAN" "Verbinde mit $ssid..."
+    else
+        nmcli device wifi connect "$ssid"
+        notify-send "WLAN" "Verbinde mit $ssid..."
+    fi
+fi

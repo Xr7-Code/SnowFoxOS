@@ -1,0 +1,30 @@
+#!/bin/bash
+
+LOCKFILE="/tmp/power-menu.lock"
+
+if [ -e "$LOCKFILE" ]; then
+    pkill wofi
+    rm "$LOCKFILE"
+    exit 0
+fi
+
+touch "$LOCKFILE"
+
+choice=$(echo -e "Herunterfahren\nNeu starten\nAbmelden\nSperren\nAbbrechen" | wofi --show dmenu --prompt "Power Menu")
+
+rm "$LOCKFILE"
+
+case "$choice" in
+    "Herunterfahren")
+        systemctl poweroff
+        ;;
+    "Neu starten")
+        systemctl reboot
+        ;;
+    "Abmelden")
+        swaymsg exit
+        ;;
+    "Sperren")
+        swaylock &
+        ;;
+esac

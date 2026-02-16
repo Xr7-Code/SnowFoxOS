@@ -1,0 +1,43 @@
+#!/bin/bash
+
+LOCKFILE="/tmp/snowfox-settings.lock"
+
+if [ -e "$LOCKFILE" ]; then
+    pkill wofi
+    rm "$LOCKFILE"
+    exit 0
+fi
+
+touch "$LOCKFILE"
+
+# Settings-Menü
+choice=$(echo -e "Wallpaper: Hell\nWallpaper: Dunkel\nWiFi Manager\nPower Menu\nSystem Info\nStore (Apps installieren)" | wofi --show dmenu --prompt "SnowFox Settings")
+
+rm "$LOCKFILE"
+
+case "$choice" in
+    "Wallpaper: Hell")
+        swaymsg output "*" bg ~/Pictures/wallpapers/snowfox_light.png fill
+        sed -i 's|snowfox_dark.png|snowfox_light.png|' ~/.config/sway/config
+        sed -i 's|snowfox_dark_blur.png|snowfox_light_blur.png|' ~/.config/swaylock/config
+        notify-send "SnowFox" "Helles Wallpaper aktiviert"
+        ;;
+    "Wallpaper: Dunkel")
+        swaymsg output "*" bg ~/Pictures/wallpapers/snowfox_dark.png fill
+        sed -i 's|snowfox_light.png|snowfox_dark.png|' ~/.config/sway/config
+        sed -i 's|snowfox_light_blur.png|snowfox_dark_blur.png|' ~/.config/swaylock/config
+        notify-send "SnowFox" "Dunkles Wallpaper aktiviert"
+        ;;
+    "WiFi Manager")
+        ~/bin/wifi-menu &
+        ;;
+    "Power Menu")
+        ~/bin/power-menu &
+        ;;
+    "System Info")
+        kitty -e bash -c "echo '=== SnowFox System Info ==='; echo ''; neofetch; echo ''; echo 'Drücke Enter zum Schließen'; read" &
+        ;;
+    "Store (Apps installieren)")
+        ~/bin/snowfox-store &
+        ;;
+esac

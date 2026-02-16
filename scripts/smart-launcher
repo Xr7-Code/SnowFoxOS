@@ -1,0 +1,44 @@
+#!/bin/bash
+
+LOCKFILE="/tmp/smart-launcher.lock"
+
+if [ -e "$LOCKFILE" ]; then
+    pkill wofi
+    rm "$LOCKFILE"
+    exit 0
+fi
+
+touch "$LOCKFILE"
+
+# Apps + Recent Files kombinieren
+{
+    # Installierte Apps (.desktop files)
+    find /usr/share/applications ~/.local/share/applications -name "*.desktop" 2>/dev/null | while read desktop; do
+        name=$(grep "^Name=" "$desktop" | head -1 | cut -d= -f2)
+        echo "📱 $name|app|$desktop"
+    done
+    
+    # Recent Files (letzte 20)
+    find ~/Documents ~/Downloads ~/Pictures -type f \( -name "*.pdf" -o -name "*.txt" -o -name "*.md" -o -name "*.docx" -o -name "*.png" -o -name "*.jpg" \) -mtime -30 2>/dev/null | head -20 | while read file; do
+        basename=$(basename "$file")
+        echo "📄 $basename|file|$file"
+    done
+} | wofi --show dmenu --prompt "Suchen..." --insensitive | {
+    read selected
+    
+    if [ -n "$selected" ]; then
+        type=$(echo "$selected" | cut -d'|' -f2)
+        path=$(echo "$selected" | cut -d'|' -f3)
+        
+        case "$type" in
+            app)
+                gtk-launch $(basename "$path") &
+                ;;
+            file)
+                xdg-open "$path" &
+                ;;
+        esac
+    fi
+}
+
+rm "$LOCKFILE"

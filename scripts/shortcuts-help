@@ -1,0 +1,68 @@
+#!/bin/bash
+
+kitty --title "SnowFox Shortcuts" -e bash -c '
+clear
+cat << "HELP"
+╔════════════════════════════════════════════════════════════╗
+║              🦊 SnowFoxOS Keyboard Shortcuts              ║
+╠════════════════════════════════════════════════════════════╣
+║ APPS & LAUNCHER                                            ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Mod+Return          Terminal öffnen                       ║
+║  Mod+B               Firefox starten                       ║
+║  Mod+E               Dateimanager (Thunar)                 ║
+║  Mod+R               App-Menü (alle Apps)                  ║
+║  Ctrl+Space          Smart Launcher (Apps + Files)         ║
+║                                                             ║
+║ SYSTEM                                                      ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Mod+,               SnowFox Settings                      ║
+║  Mod+N               WiFi Manager                          ║
+║  Mod+X               Bildschirm sperren                    ║
+║  Mod+H               Diese Hilfe                           ║
+║  Power-Button        Power-Menü (Herunterfahren etc.)     ║
+║                                                             ║
+║ WORKSPACES                                                  ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Mod+1-5             Zu Workspace wechseln                 ║
+║  Mod+Shift+1-5       Fenster zu Workspace verschieben     ║
+║  Mod+Tab             Nächster Workspace                    ║
+║  Mod+Shift+Tab       Vorheriger Workspace                  ║
+║                                                             ║
+║ FENSTER                                                     ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Mod+Q               Fenster schließen                     ║
+║  Mod+F               Fullscreen                            ║
+║  Mod+Space           Floating toggle                       ║
+║  Alt+Tab             Nächstes Fenster                      ║
+║  Alt+Shift+Tab       Vorheriges Fenster                    ║
+║                                                             ║
+║ NAVIGATION (Vim-Style)                                      ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Mod+H/J/K/L         Fokus bewegen                         ║
+║  Mod+Shift+H/J/K/L   Fenster bewegen                       ║
+║                                                             ║
+║ LAYOUTS                                                     ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Mod+W               Tab-Layout                            ║
+║  Mod+S               Stack-Layout                          ║
+║  Mod+D               Split-Layout toggle                   ║
+║                                                             ║
+║ SCREENSHOTS                                                 ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Print               Ganzer Bildschirm                     ║
+║  Mod+Print           Bereich auswählen                     ║
+║  Mod+Shift+S         Screenshot in Clipboard              ║
+║                                                             ║
+║ SWAY                                                        ║
+║ ─────────────────────────────────────────────────────────  ║
+║  Mod+Shift+C         Config neu laden                      ║
+║  Mod+Shift+E         Sway beenden                          ║
+╚════════════════════════════════════════════════════════════╝
+
+Hinweis: Mod = Windows/Super-Taste
+
+Drücke Enter zum Schließen...
+HELP
+read
+'

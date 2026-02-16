@@ -1,0 +1,80 @@
+#!/bin/bash
+
+LOCKFILE="/tmp/snowfox-store.lock"
+
+if [ -e "$LOCKFILE" ]; then
+    pkill wofi
+    rm "$LOCKFILE"
+    exit 0
+fi
+
+touch "$LOCKFILE"
+
+# Hauptmenü
+action=$(echo -e "📦 Apps installieren\n🗑️  Apps deinstallieren\n🔍 App suchen" | wofi --show dmenu --prompt "SnowFox Store")
+
+rm "$LOCKFILE"
+
+case "$action" in
+    "📦 Apps installieren")
+        app=$(echo -e "Thunderbird (E-Mail)\nVLC Media Player\nGIMP (Bildbearbeitung)\nInkscape (Vektor-Grafik)\nLibreOffice\nVSCode\nOBS Studio (Streaming)\nBlender (3D)\nKrita (Digital Painting)\nAudacity (Audio)\nhtop (System Monitor)\nDocker\nneofetch" | wofi --show dmenu --prompt "App installieren")
+        
+        case "$app" in
+            "Thunderbird"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y thunderbird && echo '✅ Thunderbird installiert!' && sleep 2"
+                ;;
+            "VLC"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y vlc && echo '✅ VLC installiert!' && sleep 2"
+                ;;
+            "GIMP"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y gimp && echo '✅ GIMP installiert!' && sleep 2"
+                ;;
+            "Inkscape"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y inkscape && echo '✅ Inkscape installiert!' && sleep 2"
+                ;;
+            "LibreOffice")
+                kitty -e bash -c "sudo apt update && sudo apt install -y libreoffice && echo '✅ LibreOffice installiert!' && sleep 2"
+                ;;
+            "VSCode")
+                kitty -e bash -c "wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg && sudo install -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/trusted.gpg.d/ && echo 'deb [arch=amd64] https://packages.microsoft.com/repos/code stable main' | sudo tee /etc/apt/sources.list.d/vscode.list && sudo apt update && sudo apt install -y code && echo '✅ VSCode installiert!' && sleep 2"
+                ;;
+            "OBS Studio"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y obs-studio && echo '✅ OBS Studio installiert!' && sleep 2"
+                ;;
+            "Blender"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y blender && echo '✅ Blender installiert!' && sleep 2"
+                ;;
+            "Krita"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y krita && echo '✅ Krita installiert!' && sleep 2"
+                ;;
+            "Audacity"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y audacity && echo '✅ Audacity installiert!' && sleep 2"
+                ;;
+            "htop"*)
+                kitty -e bash -c "sudo apt update && sudo apt install -y htop && echo '✅ htop installiert!' && sleep 2"
+                ;;
+            "Docker")
+                kitty -e bash -c "sudo apt update && sudo apt install -y docker.io && sudo systemctl enable docker && sudo usermod -aG docker $USER && echo '✅ Docker installiert! Bitte neu einloggen!' && sleep 3"
+                ;;
+            "neofetch")
+                kitty -e bash -c "sudo apt update && sudo apt install -y neofetch && echo '✅ neofetch installiert!' && sleep 2"
+                ;;
+        esac
+        ;;
+        
+    "🗑️  Apps deinstallieren")
+        installed=$(dpkg -l | grep -E "^ii" | awk '{print $2}' | grep -v "^lib" | wofi --show dmenu --prompt "App deinstallieren")
+        
+        if [ -n "$installed" ]; then
+            kitty -e bash -c "sudo apt remove --purge -y $installed && sudo apt autoremove -y && echo '✅ $installed deinstalliert!' && sleep 2"
+        fi
+        ;;
+        
+    "🔍 App suchen")
+        search=$(echo "" | wofi --show dmenu --prompt "Suchbegriff eingeben")
+        
+        if [ -n "$search" ]; then
+            kitty -e bash -c "apt search $search && echo '' && echo 'Drücke Enter zum Schließen' && read"
+        fi
+        ;;
+esac
