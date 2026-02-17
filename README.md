@@ -27,7 +27,7 @@ Perfekt für Entwickler, die einen cleanen, ablenkungsfreien Workspace wollen.
 
 ```bash
 # Repository klonen
-git clone https://github.com/USERNAME/SnowFoxOS.git
+git clone https://github.com/Xr7-Code/SnowFoxOS.git
 cd SnowFoxOS
 
 # Installer ausführen
@@ -116,8 +116,8 @@ Siehe [LICENSE](LICENSE) für Details.
 
 ## 💬 Support & Community
 
-- **Issues:** [GitHub Issues](https://github.com/USERNAME/SnowFoxOS/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/USERNAME/SnowFoxOS/discussions)
+- **Issues:** [GitHub Issues](https://github.com/Xr7-Code/SnowFoxOS/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Xr7-Code/SnowFoxOS/discussions)
 
 ## 🙏 Credits
 
@@ -129,6 +129,3 @@ Basierend auf:
 - Waybar
 - Und vielen anderen Open-Source-Projekten
 
----
-
-**⭐ Wenn dir SnowFoxOS gefällt, gib dem Projekt einen Star!**
