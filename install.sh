@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# SnowFoxOS Installer v1.3
+# SnowFoxOS Installer v1.4
 # Minimal. Fast. Beautiful.
 
 set -e
@@ -13,7 +13,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo "════════════════════════════════════════════════════"
-echo "         🦊 SnowFoxOS Installation Script v1.3    "
+echo "         🦊 SnowFoxOS Installation Script v1.4    "
 echo "════════════════════════════════════════════════════"
 
 if [ "$EUID" -ne 0 ]; then 
@@ -44,7 +44,7 @@ DEBIAN_FRONTEND=noninteractive apt install -y -qq \
     mako-notifier brightnessctl pulseaudio pavucontrol \
     git curl wget htop imagemagick swaybg \
     fonts-noto fonts-font-awesome libnotify-bin \
-    swayidle policykit-1 polkit
+    swayidle elogind libpam-elogind
 
 echo -e "${GREEN}✓${NC} Core-Pakete installiert"
 
@@ -73,27 +73,24 @@ if lspci | grep -qi "RTL8821CE"; then
     cd "$SCRIPT_DIR"
 fi
 
-# 5. NetworkManager konfigurieren (ALLES was WiFi stört entfernen)
+# 5. NetworkManager konfigurieren
 echo "🌐 Konfiguriere NetworkManager..."
 
-# Alle konkurrierenden Services stoppen
+# Alle konkurrierenden Services stoppen & maskieren
 for svc in dhcpcd networking wpa_supplicant; do
     systemctl stop $svc 2>/dev/null || true
     systemctl disable $svc 2>/dev/null || true
     systemctl mask $svc 2>/dev/null || true
 done
 
-# wlo1 aus /etc/network/interfaces entfernen
-if [ -f /etc/network/interfaces ]; then
-    cp /etc/network/interfaces /etc/network/interfaces.backup
-    cat > /etc/network/interfaces << 'EOF'
+# /etc/network/interfaces sauber schreiben
+cat > /etc/network/interfaces << 'EOF'
 # SnowFoxOS - Managed by NetworkManager
 source /etc/network/interfaces.d/*
 
 auto lo
 iface lo inet loopback
 EOF
-fi
 
 # NetworkManager Config
 mkdir -p /etc/NetworkManager/conf.d/
@@ -118,19 +115,15 @@ systemctl restart NetworkManager
 
 echo -e "${GREEN}✓${NC} NetworkManager konfiguriert"
 
-# 6. Polkit für systemctl (shutdown/reboot ohne sudo)
-cat > /etc/polkit-1/rules.d/50-snowfox.rules << 'EOF'
-polkit.addRule(function(action, subject) {
-    if ((action.id == "org.freedesktop.systemd1.manage-units" ||
-         action.id == "org.freedesktop.login1.power-off" ||
-         action.id == "org.freedesktop.login1.reboot") &&
-         subject.isInGroup("sudo")) {
-        return polkit.Result.YES;
-    }
-});
+# 6. Shutdown/Reboot ohne sudo via sudoers
+echo "🔑 Konfiguriere Power-Management..."
+cat > /etc/sudoers.d/snowfox-power << 'EOF'
+# SnowFoxOS - Power Management ohne Passwort
+%sudo ALL=(ALL) NOPASSWD: /sbin/poweroff, /sbin/reboot, /sbin/shutdown
 EOF
+chmod 440 /etc/sudoers.d/snowfox-power
 
-echo -e "${GREEN}✓${NC} Polkit konfiguriert (Shutdown/Reboot ohne Passwort)"
+echo -e "${GREEN}✓${NC} Power-Management konfiguriert"
 
 # 7. Configs kopieren
 echo "⚙️  Kopiere Konfigurationen..."
@@ -149,7 +142,7 @@ safe_copy() {
         cp "$SCRIPT_DIR/$1" "$USER_HOME/$2"
         echo -e "${GREEN}✓${NC} $1"
     else
-        echo -e "${YELLOW}⚠${NC} $1 fehlt"
+        echo -e "${YELLOW}⚠${NC} $1 fehlt im Repository"
     fi
 }
 
@@ -185,7 +178,7 @@ if [ -d "$SCRIPT_DIR/wallpapers" ]; then
     done
 fi
 
-# 10. Desktop File für SnowFox Store
+# 10. Desktop File
 mkdir -p "$USER_HOME/.local/share/applications"
 cat > "$USER_HOME/.local/share/applications/snowfox-store.desktop" << EOF
 [Desktop Entry]
@@ -220,10 +213,4 @@ echo ""
 echo "1. Abmelden:    exit"
 echo "2. Neu anmelden"
 echo "3. Sway startet automatisch!"
-echo ""
-echo "Shortcuts:"
-echo "  Mod+Return   Terminal"
-echo "  Mod+R        App-Menü"
-echo "  Mod+F1       Alle Shortcuts"
-echo "  Power-Button Power-Menü"
 echo ""
