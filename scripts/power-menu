@@ -10,7 +10,7 @@ fi
 
 touch "$LOCKFILE"
 
-choice=$(printf "⏻  Herunterfahren\n↺  Neu starten\n⎋  Abmelden\n  Sperren\n✕  Abbrechen" | \
+choice=$(printf "⏻  Herunterfahren\n↺  Neu starten\n⎋  Abmelden\n🔒  Sperren\n✕  Abbrechen" | \
     wofi --show dmenu \
          --prompt "Power Menu" \
          --width 300 \
@@ -21,15 +21,15 @@ rm -f "$LOCKFILE"
 
 case "$choice" in
     "⏻  Herunterfahren")
-        systemctl poweroff
+        sudo /sbin/poweroff
         ;;
     "↺  Neu starten")
-        systemctl reboot
+        sudo /sbin/reboot
         ;;
     "⎋  Abmelden")
         swaymsg exit
         ;;
-    "  Sperren")
+    "🔒  Sperren")
         swaylock &
         ;;
     *)
