@@ -27,7 +27,7 @@ Perfekt für Entwickler, die einen cleanen, ablenkungsfreien Workspace wollen.
 
 ```bash
 # Repository klonen
-git clone https://github.com/Xr7-Code/SnowFoxOS.git
+git clone https://github.com/USERNAME/SnowFoxOS.git
 cd SnowFoxOS
 
 # Installer ausführen

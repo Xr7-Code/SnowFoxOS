@@ -6,16 +6,24 @@ set $mod Mod4
 input "type:keyboard" {
     xkb_layout de
     xkb_variant nodeadkeys
+    xkb_options caps:escape
+}
+
+input "type:touchpad" {
+    tap enabled
+    natural_scroll enabled
+    dwt enabled
 }
 
 ### Design & Colors ###
 default_border pixel 1
 default_floating_border pixel 1
+focus_follows_mouse yes
 
-client.focused #9B59B6 #9B59B6 #ffffff #9B59B6 #9B59B6
-client.unfocused #1a1a1a #1a1a1a #666666 #1a1a1a #1a1a1a
+client.focused          #9B59B6 #9B59B6 #ffffff #9B59B6 #9B59B6
+client.unfocused        #1a1a1a #1a1a1a #666666 #1a1a1a #1a1a1a
 client.focused_inactive #1a1a1a #1a1a1a #888888 #1a1a1a #1a1a1a
-client.urgent #ff5555 #ff5555 #ffffff #ff5555 #ff5555
+client.urgent           #ff5555 #ff5555 #ffffff #ff5555 #ff5555
 
 ### Gaps ###
 gaps inner 4
@@ -27,37 +35,42 @@ smart_borders on
 output * bg ~/Pictures/wallpapers/snowfox_dark.png fill
 
 ### Window Rules ###
-for_window [app_id="kitty"] opacity 0.92
-for_window [app_id="thunar"] opacity 0.95
+for_window [app_id="kitty"] opacity 0.95
+for_window [app_id="thunar"] opacity 0.98
+for_window [app_id="wofi"] border none
 
 ### Startup Programs ###
 exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway
-exec_always bash -c "pkill waybar; sleep 1; waybar"
-exec mako
-exec swayidle -w timeout 600 'swaylock -f' timeout 900 'swaymsg "output * dpms off"' resume 'swaymsg "output * dpms on"' before-sleep 'swaylock -f'
+exec_always pkill waybar; sleep 0.5 && waybar
+exec_always pkill mako; sleep 0.5 && mako
+exec swayidle -w \
+    timeout 600 'swaylock -f' \
+    timeout 900 'swaymsg "output * dpms off"' \
+    resume 'swaymsg "output * dpms on"' \
+    before-sleep 'swaylock -f'
 
 ### Application Shortcuts ###
 bindsym $mod+Return exec kitty
 bindsym $mod+e exec thunar
 bindsym $mod+b exec firefox-esr
-bindsym $mod+r exec wofi --show drun
+bindsym $mod+r exec wofi --show drun --insensitive
 
 ### Window Management ###
 bindsym $mod+q kill
 bindsym $mod+f fullscreen toggle
-bindsym $mod+space floating toggle
-
-### System ###
-bindsym $mod+Shift+c reload
-bindsym $mod+Shift+e exit
-bindsym $mod+x exec swaylock
-bindsym XF86PowerOff exec ~/bin/power-menu
+bindsym $mod+shift+space floating toggle
 
 ### SnowFox Features ###
-bindsym Ctrl+Space exec ~/bin/smart-launcher
+bindsym Control+space exec ~/bin/smart-launcher
 bindsym $mod+comma exec ~/bin/snowfox-settings
 bindsym $mod+n exec ~/bin/wifi-menu
-bindsym $mod+h exec ~/bin/shortcuts-help
+bindsym $mod+x exec swaylock
+
+### Help ###
+bindsym $mod+F1 exec ~/bin/shortcuts-help
+
+### Power Button → Power Menu (nicht direkt ausschalten!) ###
+bindcode 124 exec ~/bin/power-menu
 
 ### Workspaces ###
 bindsym $mod+1 workspace number 1
@@ -81,20 +94,32 @@ bindsym $mod+Tab workspace next
 bindsym $mod+Shift+Tab workspace prev
 
 ### Window Navigation (Vim Keys) ###
-bindsym $mod+h focus left
-bindsym $mod+j focus down
-bindsym $mod+k focus up
-bindsym $mod+l focus right
+bindsym $mod+Left focus left
+bindsym $mod+Down focus down
+bindsym $mod+Up focus up
+bindsym $mod+Right focus right
 
-bindsym $mod+Shift+h move left
-bindsym $mod+Shift+j move down
-bindsym $mod+Shift+k move up
-bindsym $mod+Shift+l move right
+### Window Moving ###
+bindsym $mod+Shift+Left move left
+bindsym $mod+Shift+Down move down
+bindsym $mod+Shift+Up move up
+bindsym $mod+Shift+Right move right
 
 ### Layouts ###
 bindsym $mod+w layout tabbed
 bindsym $mod+s layout stacking
 bindsym $mod+d layout toggle split
+
+### Resize Mode ###
+mode "resize" {
+    bindsym Left resize shrink width 10px
+    bindsym Right resize grow width 10px
+    bindsym Up resize shrink height 10px
+    bindsym Down resize grow height 10px
+    bindsym Escape mode "default"
+    bindsym Return mode "default"
+}
+bindsym $mod+shift+r mode "resize"
 
 ### Media Keys ###
 bindsym XF86AudioRaiseVolume exec pactl set-sink-volume @DEFAULT_SINK@ +5%
@@ -104,6 +129,9 @@ bindsym XF86MonBrightnessUp exec brightnessctl set 5%+
 bindsym XF86MonBrightnessDown exec brightnessctl set 5%-
 
 ### Screenshots ###
-bindsym Print exec grim ~/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png
+bindsym Print exec grim ~/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png && notify-send "Screenshot" "Gespeichert in ~/Pictures"
 bindsym $mod+Print exec grim -g "$(slurp)" ~/Pictures/screenshot-$(date +%Y%m%d-%H%M%S).png
 bindsym $mod+Shift+s exec grim -g "$(slurp)" - | wl-copy
+
+### Sway Control ###
+bindsym $mod+Shift+c reload
