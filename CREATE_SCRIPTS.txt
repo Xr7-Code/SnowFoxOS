@@ -1,0 +1,7 @@
+#!/bin/bash
+# This file contains all scripts - extract them manually
+
+echo "Creating SnowFoxOS scripts..."
+
+# All scripts will be in the package
+# See individual script files

@@ -1,24 +1,23 @@
 #!/bin/bash
 
-# SnowFoxOS Installer v1.6
-# Strategie: Elogind-First & No-Recommends
+# SnowFoxOS Installer v1.3
+# Minimal. Fast. Beautiful.
 
-set -u
+set -e
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Farben für die Ausgabe
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo "===================================================="
-echo -e "          ${GREEN}🦊 SnowFoxOS Installation Script v1.6${NC}"
-echo "===================================================="
+echo "════════════════════════════════════════════════════"
+echo "         🦊 SnowFoxOS Installation Script v1.3    "
+echo "════════════════════════════════════════════════════"
 
-# 1. Root & User Check
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}❌ Fehler: Bitte als root ausführen (sudo bash install.sh)${NC}"
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "${RED}❌ Bitte als root ausführen: sudo bash install.sh${NC}"
     exit 1
 fi
 
@@ -26,110 +25,205 @@ if [ -n "$SUDO_USER" ]; then
     REAL_USER="$SUDO_USER"
     USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 else
-    echo -e "${RED}❌ Fehler: Bitte mit sudo ausführen!${NC}"
+    echo -e "${RED}❌ Bitte mit sudo ausführen, nicht als root direkt!${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓${NC} Installiere für: $REAL_USER in $USER_HOME"
+echo -e "${GREEN}✓${NC} Installation für User: $REAL_USER"
+echo -e "${GREEN}✓${NC} Home-Verzeichnis: $USER_HOME"
 
-# 2. System Vorbereitung
-echo "📦 Aktualisiere Paketquellen..."
-apt update -qq
+# 1. System Update
+echo "📦 System wird aktualisiert..."
+apt update -qq && apt upgrade -y -qq
 
-# 3. Den Systemd-Konflikt aktiv lösen
-echo "🛡️  Blockiere systemd-sysv und bereite Elogind vor..."
-# Wir verhindern, dass systemd-sysv jemals angefasst wird
-apt-mark hold systemd-sysv 2>/dev/null || true
-
-# Spezielle Optionen für eine "saubere" Installation ohne systemd-Beifang
-APT_OPTS="-y -qq -o APT::Install-Recommends=0 -o APT::Install-Suggests=0"
-
-echo "📦 Installiere Core-System (Elogind & Sway)..."
-# Zuerst Elogind fixieren
-DEBIAN_FRONTEND=noninteractive apt install $APT_OPTS elogind libpam-elogind libelogind0
-
-# Dann den Rest ohne Recommends installieren
-DEBIAN_FRONTEND=noninteractive apt install $APT_OPTS \
+# 2. Essential Packages
+echo "📦 Installiere Core-Pakete..."
+DEBIAN_FRONTEND=noninteractive apt install -y -qq \
     sway waybar wofi kitty thunar firefox-esr neovim \
     network-manager grim slurp wl-clipboard swaylock \
     mako-notifier brightnessctl pulseaudio pavucontrol \
     git curl wget htop imagemagick swaybg \
-    fonts-noto fonts-font-awesome libnotify-bin swayidle
+    fonts-noto fonts-font-awesome libnotify-bin \
+    swayidle policykit-1 polkit
 
-# 4. Treiber (Optional)
-echo "🔧 Installiere Firmware-Pakete..."
-DEBIAN_FRONTEND=noninteractive apt install $APT_OPTS \
+echo -e "${GREEN}✓${NC} Core-Pakete installiert"
+
+# 3. Firmware & Drivers
+echo "🔧 Installiere Treiber..."
+DEBIAN_FRONTEND=noninteractive apt install -y -qq \
     firmware-linux-free firmware-linux-nonfree \
     firmware-misc-nonfree firmware-realtek firmware-iwlwifi \
-    intel-microcode amd64-microcode || echo -e "${YELLOW}⚠ Einige Treiber fehlen (nicht kritisch).${NC}"
+    firmware-atheros intel-microcode amd64-microcode \
+    || echo -e "${YELLOW}⚠ Einige Treiber-Pakete nicht gefunden${NC}"
 
-# 5. Netzwerk-Konfiguration
+echo -e "${GREEN}✓${NC} Treiber installiert"
+
+# 4. RTL8821CE WiFi Driver
+if lspci | grep -qi "RTL8821CE"; then
+    echo "📡 RTL8821CE gefunden, installiere Treiber..."
+    apt install -y -qq dkms build-essential linux-headers-$(uname -r) git
+    cd /tmp
+    rm -rf rtl8821ce
+    if git clone https://github.com/tomaspinho/rtl8821ce >/dev/null 2>&1; then
+        cd rtl8821ce
+        ./install.sh >/dev/null 2>&1 \
+            && echo -e "${GREEN}✓${NC} RTL8821CE Treiber installiert" \
+            || echo -e "${YELLOW}⚠${NC} Treiber-Install fehlgeschlagen (optional)"
+    fi
+    cd "$SCRIPT_DIR"
+fi
+
+# 5. NetworkManager konfigurieren (ALLES was WiFi stört entfernen)
 echo "🌐 Konfiguriere NetworkManager..."
+
+# Alle konkurrierenden Services stoppen
 for svc in dhcpcd networking wpa_supplicant; do
     systemctl stop $svc 2>/dev/null || true
     systemctl disable $svc 2>/dev/null || true
+    systemctl mask $svc 2>/dev/null || true
 done
 
+# wlo1 aus /etc/network/interfaces entfernen
+if [ -f /etc/network/interfaces ]; then
+    cp /etc/network/interfaces /etc/network/interfaces.backup
+    cat > /etc/network/interfaces << 'EOF'
+# SnowFoxOS - Managed by NetworkManager
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+EOF
+fi
+
+# NetworkManager Config
 mkdir -p /etc/NetworkManager/conf.d/
 cat > /etc/NetworkManager/conf.d/snowfox.conf << 'EOF'
 [main]
 plugins=ifupdown,keyfile
+
 [ifupdown]
 managed=true
+
 [connection]
 wifi.powersave=2
+
+[device]
+wifi.scan-rand-mac-address=no
 EOF
-systemctl enable NetworkManager && systemctl restart NetworkManager
 
-# 6. Sudoers für Power-Management
-echo "🔑 Erlaube Power-Management ohne Passwort..."
-echo "%sudo ALL=(ALL) NOPASSWD: /sbin/poweroff, /sbin/reboot, /sbin/shutdown" > /etc/sudoers.d/snowfox-power
-chmod 440 /etc/sudoers.d/snowfox-power
+# NetworkManager starten
+systemctl unmask NetworkManager 2>/dev/null || true
+systemctl enable NetworkManager
+systemctl restart NetworkManager
 
-# 7. Verzeichnisse erstellen
-echo "⚙️  Erstelle Ordnerstruktur..."
-mkdir -p "$USER_HOME/.config/sway" "$USER_HOME/.config/waybar" \
-         "$USER_HOME/.config/wofi" "$USER_HOME/.config/kitty" \
-         "$USER_HOME/.config/swaylock" "$USER_HOME/.config/mako" \
-         "$USER_HOME/bin" "$USER_HOME/Pictures/wallpapers"
+echo -e "${GREEN}✓${NC} NetworkManager konfiguriert"
 
-# 8. Dateien kopieren
+# 6. Polkit für systemctl (shutdown/reboot ohne sudo)
+cat > /etc/polkit-1/rules.d/50-snowfox.rules << 'EOF'
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.freedesktop.systemd1.manage-units" ||
+         action.id == "org.freedesktop.login1.power-off" ||
+         action.id == "org.freedesktop.login1.reboot") &&
+         subject.isInGroup("sudo")) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+
+echo -e "${GREEN}✓${NC} Polkit konfiguriert (Shutdown/Reboot ohne Passwort)"
+
+# 7. Configs kopieren
 echo "⚙️  Kopiere Konfigurationen..."
-cp_if_exists() {
-    if [ -f "$SCRIPT_DIR/configs/$1" ]; then
-        cp "$SCRIPT_DIR/configs/$1" "$USER_HOME/$2"
-        echo -e "${GREEN}✓${NC} $1 installiert"
+mkdir -p \
+    "$USER_HOME/.config/sway" \
+    "$USER_HOME/.config/waybar" \
+    "$USER_HOME/.config/wofi" \
+    "$USER_HOME/.config/kitty" \
+    "$USER_HOME/.config/swaylock" \
+    "$USER_HOME/.config/mako" \
+    "$USER_HOME/bin" \
+    "$USER_HOME/Pictures/wallpapers"
+
+safe_copy() {
+    if [ -f "$SCRIPT_DIR/$1" ]; then
+        cp "$SCRIPT_DIR/$1" "$USER_HOME/$2"
+        echo -e "${GREEN}✓${NC} $1"
     else
-        echo -e "${YELLOW}⚠${NC} $1 fehlt in /configs"
+        echo -e "${YELLOW}⚠${NC} $1 fehlt"
     fi
 }
 
-cp_if_exists "sway-config" ".config/sway/config"
-cp_if_exists "waybar-config" ".config/waybar/config"
-cp_if_exists "waybar-style.css" ".config/waybar/style.css"
-cp_if_exists "wofi-style.css" ".config/wofi/style.css"
-cp_if_exists "kitty.conf" ".config/kitty/kitty.conf"
-cp_if_exists "swaylock-config" ".config/swaylock/config"
-cp_if_exists "bash_profile" ".bash_profile"
+safe_copy "configs/sway-config"      ".config/sway/config"
+safe_copy "configs/waybar-config"    ".config/waybar/config"
+safe_copy "configs/waybar-style.css" ".config/waybar/style.css"
+safe_copy "configs/wofi-style.css"   ".config/wofi/style.css"
+safe_copy "configs/kitty.conf"       ".config/kitty/kitty.conf"
+safe_copy "configs/swaylock-config"  ".config/swaylock/config"
+safe_copy "configs/mako-config"      ".config/mako/config"
+safe_copy "configs/bash_profile"     ".bash_profile"
 
-# 9. Scripts & Wallpapers
+# 8. Scripts
+echo "📝 Installiere Scripts..."
 if [ -d "$SCRIPT_DIR/scripts" ]; then
-    cp -r "$SCRIPT_DIR/scripts/"* "$USER_HOME/bin/" 2>/dev/null || true
+    cp "$SCRIPT_DIR/scripts/"* "$USER_HOME/bin/" 2>/dev/null || true
     chmod +x "$USER_HOME/bin/"* 2>/dev/null || true
+    echo -e "${GREEN}✓${NC} Scripts installiert"
 fi
 
+# 9. Wallpapers
+echo "🖼️  Installiere Wallpapers..."
 if [ -d "$SCRIPT_DIR/wallpapers" ]; then
-    cp "$SCRIPT_DIR/wallpapers/"*.png "$USER_HOME/Pictures/wallpapers/" 2>/dev/null || true
+    for img in "$SCRIPT_DIR/wallpapers/"*.png; do
+        [ -f "$img" ] || continue
+        cp "$img" "$USER_HOME/Pictures/wallpapers/"
+        basename=$(basename "$img")
+        name="${basename%.png}"
+        convert "$USER_HOME/Pictures/wallpapers/$basename" \
+            -blur 0x8 \
+            "$USER_HOME/Pictures/wallpapers/${name}_blur.png" 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} $basename"
+    done
 fi
 
-# 10. Finale Rechtevergabe
-echo "🔐 Setze Dateirechte für $REAL_USER..."
-chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/.config"
-chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/bin"
-chown -R "$REAL_USER:$REAL_USER" "$USER_HOME/Pictures"
-chown "$REAL_USER:$REAL_USER" "$USER_HOME/.bash_profile"
+# 10. Desktop File für SnowFox Store
+mkdir -p "$USER_HOME/.local/share/applications"
+cat > "$USER_HOME/.local/share/applications/snowfox-store.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=SnowFox Store
+Comment=App Store für SnowFoxOS
+Exec=$USER_HOME/bin/snowfox-store
+Icon=system-software-install
+Terminal=false
+Categories=System;
+EOF
 
-echo -e "\n${GREEN}════════════════════════════════════════════════════"
-echo -e "          ✅ SnowFoxOS erfolgreich installiert!"
-echo -e "════════════════════════════════════════════════════${NC}"
-echo "Tippe 'exit' und logge dich neu ein, um Sway zu starten."
+# 11. Ownership fix
+chown -R "$REAL_USER:$REAL_USER" \
+    "$USER_HOME/.config" \
+    "$USER_HOME/.local" \
+    "$USER_HOME/bin" \
+    "$USER_HOME/Pictures" \
+    "$USER_HOME/.bash_profile" \
+    2>/dev/null || true
+
+# 12. Cleanup
+echo "🧹 Aufräumen..."
+apt autoremove -y -qq 2>/dev/null || true
+apt clean 2>/dev/null || true
+
+echo ""
+echo "════════════════════════════════════════════════════"
+echo -e "         ${GREEN}✅ SnowFoxOS v1.0 installiert!${NC}"
+echo "════════════════════════════════════════════════════"
+echo ""
+echo "1. Abmelden:    exit"
+echo "2. Neu anmelden"
+echo "3. Sway startet automatisch!"
+echo ""
+echo "Shortcuts:"
+echo "  Mod+Return   Terminal"
+echo "  Mod+R        App-Menü"
+echo "  Mod+F1       Alle Shortcuts"
+echo "  Power-Button Power-Menü"
+echo ""
