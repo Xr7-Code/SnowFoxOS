@@ -1,0 +1,136 @@
+/* ============================================================
+   SnowFoxOS v3 — Rofi Theme (SnowFox Palette Enhanced)
+   Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+   ============================================================ */
+
+configuration {
+    modi:           "drun,run,window";
+    show-icons:     true;
+    icon-theme:     "Papirus-Dark";
+    drun-display-format: "{name}";
+    display-drun:   "󰍉";
+    display-run:    "󰞷";
+    display-window: "󰕰";
+}
+
+* {
+    font:             "JetBrainsMono Nerd Font 10.5";
+    bg:        #1a1825;
+    bg-alt:    #201e2e;
+    bg-hover:         #313244;
+    fg:               #cdd6f4;
+    fg-alt:           #6c7086;
+    purple:    #9d6fe8;
+    purple-lt: #b899ff;
+    purple-dim:       rgba(129, 57, 232, 0.18);
+    purple-border:    rgba(163, 102, 255, 0.5);
+    orange:           #ff79c6;
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+window {
+    background-color: rgba(26, 24, 37, 0.85);
+    border:           1.5px solid;
+    border-color:     @purple-border;
+    border-radius:    14px;
+    width:            520px;
+    padding:          14px;
+    x-offset:         0;
+    y-offset:         -60px;
+    location:         center;
+}
+
+mainbox {
+    background-color: transparent;
+    spacing:          10px;
+    children:         [inputbar, listview];
+}
+
+/* ── Search bar ─────────────────────────────────────────── */
+inputbar {
+    background-color: rgba(32, 30, 46, 0.80);
+    border-radius:    10px;
+    border:           1px solid;
+    border-color:     rgba(129, 57, 232, 0.25);
+    padding:          10px 14px;
+    spacing:          10px;
+    children:         [prompt, entry];
+}
+
+prompt {
+    background-color: transparent;
+    text-color:       @purple-lt;
+    font:             "JetBrainsMono Nerd Font Bold 12";
+}
+
+entry {
+    background-color: transparent;
+    text-color:       @fg;
+    placeholder:      "Search applications...";
+    placeholder-color: @fg-alt;
+    cursor:           text;
+}
+
+/* ── Result list ────────────────────────────────────────── */
+listview {
+    background-color: transparent;
+    lines:            7;
+    columns:          1;
+    spacing:          4px;
+    fixed-height:     true;
+    scrollbar:        false;
+}
+
+element {
+    background-color: rgba(32, 30, 46, 0.80);
+    border-radius:    8px;
+    padding:          8px 12px;
+    spacing:          12px;
+    orientation:      horizontal;
+    children:         [element-icon, element-text];
+}
+
+element normal normal {
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+element normal active {
+    background-color: @purple-dim;
+    text-color:       @purple-lt;
+}
+
+element selected normal {
+    background-color: @purple-dim;
+    border:           1px solid;
+    border-color:     @purple-border;
+    text-color:       #ffffff;
+}
+
+element selected active {
+    background-color: @purple-dim;
+    text-color:       @purple-lt;
+}
+
+element alternate normal {
+    background-color: transparent;
+}
+
+element-icon {
+    size:             22px;
+    vertical-align:   0.5;
+    horizontal-align: 0.5;
+}
+
+element-text {
+    background-color: transparent;
+    text-color:       inherit;
+}
+
+scrollbar {
+    background-color: @bg-alt;
+    handle-color:     @purple-dim;
+    border-radius:    4px;
+    width:            4px;
+}
