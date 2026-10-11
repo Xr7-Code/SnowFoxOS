@@ -13,10 +13,11 @@ SnowFoxOS/
 ├── snowfox-greeting.sh               # Terminal greeting script (visuals, quotes, stats)
 ├── note.txt                          # Project philosophy & core principles
 ├── README.md                         # Main documentation & feature overview
+├── PROJECT_STRUCTURE.md              # English project structure & script documentation
 ├── snowfox-sanctuary.md              # Documentation for Focus/Sanctuary module (snowfox den)
 ├── snowfoxos-iso_builder-readme.md   # Guide & process for the ISO builder
 ├── snowfoxos-v3_display-freeze.md    # Debugging report for AMD+NVIDIA Hybrid freeze fix
-├── LICENSE                           # SnowFox Public License v1.0
+├── LICENSE                           # GNU General Public License v3.0 (GPL-3.0)
 │
 ├── lib/                              # Modular installation steps for install.sh
 │   ├── utils.sh                      # Colors, logging, helper functions & apt-lock waiter
@@ -372,7 +373,9 @@ Generates bootable, standalone ISOs for SnowFoxOS.
 ## 📄 Additional Documentation Files
 
 - `README.md`: Main manual containing feature overview, keyboard shortcuts, RAM benchmarks, security hardening specs, and hardware limitations.
+- `PROJECT_STRUCTURE.md`: Comprehensive project directory structure and script documentation.
 - `snowfoxos-iso_builder-readme.md`: Technical documentation and usage guide for the ISO builder.
 - `snowfoxos-v3_display-freeze.md`: In-depth analysis and debugging report for AMD+NVIDIA PRIME hybrid GPU freezes.
 - `snowfox-sanctuary.md`: Architecture and user guide for the `snowfox den` focus and distraction blocker module.
 - `note.txt`: Summary of the 5 core tenets of SnowFoxOS (Sovereign-First, Zero-Infrastructure, Mesh-Native, Hyper-Resilient, Ultra-Low-Resource).
+- `LICENSE`: Project license (GNU General Public License v3.0 - GPL-3.0).
