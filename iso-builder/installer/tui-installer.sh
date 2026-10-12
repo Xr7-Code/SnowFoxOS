@@ -1,435 +1,295 @@
 #!/bin/bash
 # ============================================================
-#  SnowFoxOS v3 — TUI Installer
-#  Runs on first boot of the installer ISO.
-#  Handles: disk selection, partitioning, base install,
-#           then hands off to auto-install.sh (install.sh).
+#  SnowFoxOS — TUI Installer
+#  SnowFox Theming & Interactive Partitioning / Questionnaire
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
 
-# ── Colors & helpers ─────────────────────────────────────────
+set -e
+
 PURPLE='\033[0;35m'
-GREEN='\033[0;32m'
+LPURPLE='\033[1;35m'
 ORANGE='\033[0;33m'
+GREEN='\033[0;32m'
 RED='\033[0;31m'
+CYAN='\033[0;36m'
+GRAY='\033[0;37m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-info()    { echo -e "${PURPLE}${BOLD}[SnowFox]${RESET} $1"; }
-success() { echo -e "${GREEN}${BOLD}[  OK  ]${RESET} $1"; }
-warn()    { echo -e "${ORANGE}${BOLD}[ WARN ]${RESET} $1"; }
-error()   { echo -e "${RED}${BOLD}[FAILED]${RESET} $1"; exit 1; }
-
-REPO_DIR="/opt/SnowFoxOS-v3"
-MOUNT_TARGET="/mnt/snowfox-install"
-
-# ── Wait for system to settle ────────────────────────────────
-sleep 2
-clear
-
-# ── Welcome screen ───────────────────────────────────────────
-dialog --colors \
-    --backtitle "SnowFoxOS v3 Installer" \
-    --title "Welcome" \
-    --msgbox "\n\Z5\ZbSnowFoxOS v3\Zn\n\nA lean, privacy-oriented i3 desktop\nbased on Debian 12.\n\nThis installer will:\n  • Partition your disk\n  • Install a minimal Debian 12 base\n  • Configure SnowFoxOS automatically\n\n\Z1WARNING:\Zn All data on the selected disk\nwill be permanently deleted.\n\nPress ENTER to continue." \
-    20 60
-
-# ── Keyboard layout ──────────────────────────────────────────
-KB_CHOICE=$(dialog --colors \
-    --backtitle "SnowFoxOS v3 Installer" \
-    --title "Keyboard Layout" \
-    --menu "\nSelect your keyboard layout:" \
-    15 50 6 \
-    "de" "German" \
-    "de_AT" "German (Austria)" \
-    "us" "English (US)" \
-    "gb" "English (UK)" \
-    "fr" "French" \
-    "es" "Spanish" \
-    3>&1 1>&2 2>&3) || { clear; echo "Installer cancelled."; exit 0; }
-
-# Apply keyboard layout immediately
-loadkeys "$KB_CHOICE" 2>/dev/null || loadkeys us 2>/dev/null || true
-
-# ── Username & Password ──────────────────────────────────────
-while true; do
-    NEW_USER=$(dialog --colors \
-        --backtitle "SnowFoxOS v3 Installer" \
-        --title "User Account" \
-        --inputbox "\nEnter username (lowercase, no spaces):" \
-        10 50 \
-        3>&1 1>&2 2>&3) || { clear; echo "Installer cancelled."; exit 0; }
-
-    # Validate: lowercase letters, digits, hyphens only
-    if [[ "$NEW_USER" =~ ^[a-z][a-z0-9-]{1,30}$ ]]; then
-        break
-    else
-        dialog --colors \
-            --backtitle "SnowFoxOS v3 Installer" \
-            --title "Invalid Username" \
-            --msgbox "\nUsername must:\n  • Start with a lowercase letter\n  • Contain only a-z, 0-9, or -\n  • Be 2–31 characters long" \
-            12 45
-    fi
-done
-
-while true; do
-    NEW_PASS=$(dialog --colors \
-        --backtitle "SnowFoxOS v3 Installer" \
-        --title "Password" \
-        --passwordbox "\nEnter password for '$NEW_USER':" \
-        10 50 \
-        3>&1 1>&2 2>&3) || { clear; echo "Installer cancelled."; exit 0; }
-
-    NEW_PASS2=$(dialog --colors \
-        --backtitle "SnowFoxOS v3 Installer" \
-        --title "Password" \
-        --passwordbox "\nConfirm password:" \
-        10 50 \
-        3>&1 1>&2 2>&3) || { clear; echo "Installer cancelled."; exit 0; }
-
-    if [[ "$NEW_PASS" == "$NEW_PASS2" && -n "$NEW_PASS" ]]; then
-        break
-    else
-        dialog --colors \
-            --backtitle "SnowFoxOS v3 Installer" \
-            --title "Password Mismatch" \
-            --msgbox "\nPasswords do not match or are empty.\nPlease try again." \
-            10 45
-    fi
-done
-
-# ── Hostname ─────────────────────────────────────────────────
-NEW_HOSTNAME=$(dialog --colors \
-    --backtitle "SnowFoxOS v3 Installer" \
-    --title "Hostname" \
-    --inputbox "\nEnter hostname for this machine:" \
-    10 50 "snowfox" \
-    3>&1 1>&2 2>&3) || NEW_HOSTNAME="snowfox"
-
-[[ -z "$NEW_HOSTNAME" ]] && NEW_HOSTNAME="snowfox"
-
-# ── Disk selection ───────────────────────────────────────────
-# Build list of available disks (skip loop, ram, live devices)
-DISK_LIST=()
-while IFS= read -r disk; do
-    DEV="/dev/$disk"
-    SIZE=$(lsblk -dno SIZE "$DEV" 2>/dev/null || echo "?")
-    MODEL=$(lsblk -dno MODEL "$DEV" 2>/dev/null | xargs || echo "Unknown")
-    DISK_LIST+=("$DEV" "$SIZE — $MODEL")
-done < <(lsblk -dno NAME | grep -E '^(sd|nvme|vd)' | sort)
-
-[[ ${#DISK_LIST[@]} -eq 0 ]] && error "No suitable disks found."
-
-TARGET_DISK=$(dialog --colors \
-    --backtitle "SnowFoxOS v3 Installer" \
-    --title "Select Installation Disk" \
-    --menu "\n\Z1All data on the selected disk will be erased!\Zn\n\nAvailable disks:" \
-    20 65 8 \
-    "${DISK_LIST[@]}" \
-    3>&1 1>&2 2>&3) || { clear; echo "Installer cancelled."; exit 0; }
-
-# ── Partition layout ─────────────────────────────────────────
-PART_SCHEME=$(dialog --colors \
-    --backtitle "SnowFoxOS v3 Installer" \
-    --title "Partition Layout" \
-    --menu "\nSelect partition layout for $TARGET_DISK:" \
-    18 65 4 \
-    "auto_gpt"    "GPT + EFI (recommended, modern hardware)" \
-    "auto_mbr"    "MBR (legacy BIOS, older hardware)" \
-    "auto_gpt_home" "GPT + EFI + separate /home partition" \
-    3>&1 1>&2 2>&3) || { clear; echo "Installer cancelled."; exit 0; }
-
-# ── Final confirmation ───────────────────────────────────────
-DISK_SIZE=$(lsblk -dno SIZE "$TARGET_DISK" 2>/dev/null || echo "?")
-DISK_MODEL=$(lsblk -dno MODEL "$TARGET_DISK" 2>/dev/null | xargs || echo "Unknown")
-
-dialog --colors \
-    --backtitle "SnowFoxOS v3 Installer" \
-    --title "Confirm Installation" \
-    --yesno "\n\Z1LAST WARNING — This will erase:\Zn\n\n  Disk  : $TARGET_DISK\n  Size  : $DISK_SIZE\n  Model : $DISK_MODEL\n\n  User     : $NEW_USER\n  Hostname : $NEW_HOSTNAME\n  Layout   : $PART_SCHEME\n\nContinue?" \
-    18 60 || { clear; echo "Installer cancelled."; exit 0; }
-
-# ── Partitioning ─────────────────────────────────────────────
-clear
-echo -e "${PURPLE}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-echo -e "${PURPLE}${BOLD}  Partitioning $TARGET_DISK...${RESET}"
-echo -e "${PURPLE}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-
-# Wipe existing partition table
-wipefs -a "$TARGET_DISK" 2>/dev/null || true
-sgdisk --zap-all "$TARGET_DISK" 2>/dev/null || true
-sleep 1
-
-case "$PART_SCHEME" in
-    auto_gpt)
-        # GPT: 512MB EFI + rest root
-        parted -s "$TARGET_DISK" \
-            mklabel gpt \
-            mkpart ESP fat32 1MiB 513MiB \
-            set 1 esp on \
-            mkpart primary ext4 513MiB 100%
-
-        partprobe "$TARGET_DISK"
-        sleep 2
-
-        # Determine partition device names (nvme uses p1/p2, sda uses 1/2)
-        if [[ "$TARGET_DISK" =~ nvme ]]; then
-            EFI_PART="${TARGET_DISK}p1"
-            ROOT_PART="${TARGET_DISK}p2"
-        else
-            EFI_PART="${TARGET_DISK}1"
-            ROOT_PART="${TARGET_DISK}2"
-        fi
-
-        mkfs.fat -F32 -n EFI "$EFI_PART"
-        mkfs.ext4 -L snowfox "$ROOT_PART"
-
-        mkdir -p "$MOUNT_TARGET"
-        mount "$ROOT_PART" "$MOUNT_TARGET"
-        mkdir -p "$MOUNT_TARGET/boot/efi"
-        mount "$EFI_PART" "$MOUNT_TARGET/boot/efi"
-
-        FSTAB_EFI="UUID=$(blkid -s UUID -o value $EFI_PART)  /boot/efi  vfat  defaults  0  2"
-        FSTAB_ROOT="UUID=$(blkid -s UUID -o value $ROOT_PART)  /  ext4  defaults,noatime  0  1"
-        ;;
-
-    auto_mbr)
-        # MBR: 1MB BIOS boot gap + rest root
-        parted -s "$TARGET_DISK" \
-            mklabel msdos \
-            mkpart primary ext4 1MiB 100% \
-            set 1 boot on
-
-        partprobe "$TARGET_DISK"
-        sleep 2
-
-        if [[ "$TARGET_DISK" =~ nvme ]]; then
-            ROOT_PART="${TARGET_DISK}p1"
-        else
-            ROOT_PART="${TARGET_DISK}1"
-        fi
-
-        EFI_PART=""
-        mkfs.ext4 -L snowfox "$ROOT_PART"
-
-        mkdir -p "$MOUNT_TARGET"
-        mount "$ROOT_PART" "$MOUNT_TARGET"
-
-        FSTAB_ROOT="UUID=$(blkid -s UUID -o value $ROOT_PART)  /  ext4  defaults,noatime  0  1"
-        FSTAB_EFI=""
-        ;;
-
-    auto_gpt_home)
-        # GPT: 512MB EFI + 40GB root + rest home
-        DISK_BYTES=$(lsblk -dno SIZE --bytes "$TARGET_DISK" 2>/dev/null || echo 0)
-        # Only offer separate /home if disk is larger than ~60GB
-        if [[ "$DISK_BYTES" -lt 64000000000 ]]; then
-            warn "Disk too small for separate /home — using single root partition"
-            PART_SCHEME="auto_gpt"
-        fi
-
-        parted -s "$TARGET_DISK" \
-            mklabel gpt \
-            mkpart ESP fat32 1MiB 513MiB \
-            set 1 esp on \
-            mkpart primary ext4 513MiB 40737MiB \
-            mkpart primary ext4 40737MiB 100%
-
-        partprobe "$TARGET_DISK"
-        sleep 2
-
-        if [[ "$TARGET_DISK" =~ nvme ]]; then
-            EFI_PART="${TARGET_DISK}p1"
-            ROOT_PART="${TARGET_DISK}p2"
-            HOME_PART="${TARGET_DISK}p3"
-        else
-            EFI_PART="${TARGET_DISK}1"
-            ROOT_PART="${TARGET_DISK}2"
-            HOME_PART="${TARGET_DISK}3"
-        fi
-
-        mkfs.fat -F32 -n EFI "$EFI_PART"
-        mkfs.ext4 -L snowfox "$ROOT_PART"
-        mkfs.ext4 -L home    "$HOME_PART"
-
-        mkdir -p "$MOUNT_TARGET"
-        mount "$ROOT_PART" "$MOUNT_TARGET"
-        mkdir -p "$MOUNT_TARGET/boot/efi"
-        mkdir -p "$MOUNT_TARGET/home"
-        mount "$EFI_PART"  "$MOUNT_TARGET/boot/efi"
-        mount "$HOME_PART" "$MOUNT_TARGET/home"
-
-        FSTAB_EFI="UUID=$(blkid -s UUID -o value $EFI_PART)   /boot/efi  vfat  defaults         0  2"
-        FSTAB_ROOT="UUID=$(blkid -s UUID -o value $ROOT_PART)  /          ext4  defaults,noatime  0  1"
-        FSTAB_HOME="UUID=$(blkid -s UUID -o value $HOME_PART)  /home      ext4  defaults,noatime  0  2"
-        ;;
-esac
-
-success "Disk partitioned and mounted at $MOUNT_TARGET"
-
-# ── Install Debian base system ────────────────────────────────
-echo -e "\n${PURPLE}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-echo -e "${PURPLE}${BOLD}  Installing Debian 12 base system...${RESET}"
-echo -e "${PURPLE}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-info "This step installs the minimal Debian base — takes 1–3 minutes."
-
-debootstrap \
-    --arch=amd64 \
-    --components=main,contrib,non-free,non-free-firmware \
-    --include=sudo,locales,git,curl,wget,ca-certificates,gnupg,network-manager \
-    bookworm \
-    "$MOUNT_TARGET" \
-    http://deb.debian.org/debian/
-
-success "Debian 12 base installed"
-
-# ── Configure base system ─────────────────────────────────────
-info "Configuring base system..."
-
-# fstab
-{
-    echo "$FSTAB_ROOT"
-    [[ -n "${FSTAB_EFI:-}" ]]  && echo "$FSTAB_EFI"
-    [[ -n "${FSTAB_HOME:-}" ]] && echo "$FSTAB_HOME"
-    echo "tmpfs  /tmp  tmpfs  defaults,noatime,size=4G,mode=1777  0  0"
-} > "$MOUNT_TARGET/etc/fstab"
-
-# hostname
-echo "$NEW_HOSTNAME" > "$MOUNT_TARGET/etc/hostname"
-cat > "$MOUNT_TARGET/etc/hosts" << HOSTEOF
-127.0.0.1   localhost
-127.0.1.1   $NEW_HOSTNAME
-::1         localhost ip6-localhost ip6-loopback
-HOSTEOF
-
-# apt sources
-cat > "$MOUNT_TARGET/etc/apt/sources.list" << 'SRCEOF'
-deb http://deb.debian.org/debian/ bookworm main contrib non-free non-free-firmware
-deb-src http://deb.debian.org/debian/ bookworm main contrib non-free non-free-firmware
-deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
-deb-src http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
-deb http://deb.debian.org/debian/ bookworm-updates main contrib non-free non-free-firmware
-deb-src http://deb.debian.org/debian/ bookworm-updates main contrib non-free non-free-firmware
-SRCEOF
-
-success "Base system configured"
-
-# ── Create user ───────────────────────────────────────────────
-info "Creating user: $NEW_USER"
-
-chroot "$MOUNT_TARGET" useradd -m -s /bin/bash -G sudo,video,audio,input,render,tty "$NEW_USER"
-echo "$NEW_USER:$NEW_PASS" | chroot "$MOUNT_TARGET" chpasswd
-# Root password same as user for emergency access
-echo "root:$NEW_PASS" | chroot "$MOUNT_TARGET" chpasswd
-
-success "User $NEW_USER created"
-
-# ── Copy SnowFoxOS repo into installed system ─────────────────
-info "Copying SnowFoxOS-v3 repo to installed system..."
-mkdir -p "$MOUNT_TARGET/home/$NEW_USER"
-cp -r "$REPO_DIR" "$MOUNT_TARGET/home/$NEW_USER/SnowFoxOS-v3"
-chroot "$MOUNT_TARGET" chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/SnowFoxOS-v3"
-success "Repo copied to /home/$NEW_USER/SnowFoxOS-v3"
-
-# ── Copy auto-install script ──────────────────────────────────
-cp /usr/local/bin/snowfox-auto-install "$MOUNT_TARGET/usr/local/bin/snowfox-auto-install"
-chmod +x "$MOUNT_TARGET/usr/local/bin/snowfox-auto-install"
-
-# ── Install GRUB ─────────────────────────────────────────────
-echo -e "\n${PURPLE}${BOLD}  Installing bootloader...${RESET}"
-
-# Bind mounts for chroot
-mount --bind /dev     "$MOUNT_TARGET/dev"
-mount --bind /dev/pts "$MOUNT_TARGET/dev/pts"
-mount --bind /proc    "$MOUNT_TARGET/proc"
-mount --bind /sys     "$MOUNT_TARGET/sys"
-mount --bind /run     "$MOUNT_TARGET/run"
-
-# Copy apt cache from live system to speed up chroot apt
-mkdir -p "$MOUNT_TARGET/var/cache/apt/archives"
-cp /var/cache/apt/archives/*.deb "$MOUNT_TARGET/var/cache/apt/archives/" 2>/dev/null || true
-
-if [[ "$PART_SCHEME" == "auto_mbr" ]]; then
-    chroot "$MOUNT_TARGET" bash -c "
-        apt-get install -y grub-pc 2>/dev/null
-        grub-install --target=i386-pc $TARGET_DISK
-        update-grub
-    "
-else
-    chroot "$MOUNT_TARGET" bash -c "
-        apt-get install -y grub-efi-amd64 grub-efi-amd64-signed shim-signed 2>/dev/null
-        grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=SnowFoxOS
-        update-grub
-    "
+# Ensure running as root
+if [[ $EUID -ne 0 ]]; then
+    echo "Installer must be run as root."
+    exit 1
 fi
 
-success "Bootloader installed"
+# Use dialog if available, else fallback to standard read/echo
+USE_DIALOG=false
+if command -v dialog >/dev/null 2>&1; then
+    USE_DIALOG=true
+fi
 
-# ── Set keyboard layout in installed system ───────────────────
-chroot "$MOUNT_TARGET" bash -c "
-    apt-get install -y console-setup keyboard-configuration 2>/dev/null || true
-" 2>/dev/null || true
+clear
+echo -e "${PURPLE}${BOLD}"
+echo "  ╔══════════════════════════════════════════════════════╗"
+echo "  ║                  🦊  SnowFoxOS v3                    ║"
+echo "  ║               Interactive TUI Installer              ║"
+echo "  ╚══════════════════════════════════════════════════════╝"
+echo -e "${RESET}\n"
+sleep 1
 
-cat > "$MOUNT_TARGET/etc/default/keyboard" << KBEOF
-XKBMODEL=\"pc105\"
-XKBLAYOUT=\"$KB_CHOICE\"
-XKBVARIANT=\"\"
-XKBOPTIONS=\"\"
-BACKSPACE=\"guess\"
-KBEOF
+# 1. Questionnaire (Language, Keyboard, Timezone, Hostname, Username, Password)
+if $USE_DIALOG; then
+    SYS_LANG=$(dialog --stdout --inputbox "System Language:" 8 50 "en_US.UTF-8") || exit 1
+    KEYMAP=$(dialog --stdout --inputbox "Keyboard Layout:" 8 50 "us") || exit 1
+    TIMEZONE=$(dialog --stdout --inputbox "Timezone:" 8 50 "Europe/Berlin") || exit 1
+    HOSTNAME=$(dialog --stdout --inputbox "Hostname:" 8 50 "snowfox") || exit 1
+    TARGET_USER=$(dialog --stdout --inputbox "Username:" 8 50 "snowfoxuser") || exit 1
+    TARGET_PASS=$(dialog --stdout --passwordbox "Password for $TARGET_USER:" 8 50) || exit 1
+    TARGET_PASS_CONF=$(dialog --stdout --passwordbox "Confirm Password:" 8 50) || exit 1
 
-# ── Write firstboot service (runs install.sh on first login) ──
-cat > "$MOUNT_TARGET/etc/systemd/system/snowfox-firstboot.service" << FBEOF
+    while [[ "$TARGET_PASS" != "$TARGET_PASS_CONF" || -z "$TARGET_PASS" ]]; do
+        dialog --msgbox "Passwords do not match or are empty. Try again." 6 40
+        TARGET_PASS=$(dialog --stdout --passwordbox "Password for $TARGET_USER:" 8 50) || exit 1
+        TARGET_PASS_CONF=$(dialog --stdout --passwordbox "Confirm Password:" 8 50) || exit 1
+    done
+else
+    echo -e "${LPURPLE}${BOLD}── System Configuration ──────────────────────────────${RESET}\n"
+    read -rp "System Language [default: en_US.UTF-8]: " SYS_LANG
+    SYS_LANG="${SYS_LANG:-en_US.UTF-8}"
+
+    read -rp "Keyboard Layout [default: us]: " KEYMAP
+    KEYMAP="${KEYMAP:-us}"
+
+    read -rp "Timezone [default: Europe/Berlin]: " TIMEZONE
+    TIMEZONE="${TIMEZONE:-Europe/Berlin}"
+
+    read -rp "Hostname [default: snowfox]: " HOSTNAME
+    HOSTNAME="${HOSTNAME:-snowfox}"
+
+    read -rp "Username [default: snowfox]: " TARGET_USER
+    TARGET_USER="${TARGET_USER:-snowfox}"
+
+    read -rsp "Password for $TARGET_USER: " TARGET_PASS
+    echo ""
+    read -rsp "Confirm password: " TARGET_PASS_CONF
+    echo ""
+    while [[ "$TARGET_PASS" != "$TARGET_PASS_CONF" || -z "$TARGET_PASS" ]]; do
+        echo -e "${RED}Passwords do not match or are empty. Try again.${RESET}"
+        read -rsp "Password for $TARGET_USER: " TARGET_PASS
+        echo ""
+        read -rsp "Confirm password: " TARGET_PASS_CONF
+        echo ""
+    done
+fi
+
+# 2. Disk Selection & Partitioning TUI
+clear
+echo -e "${LPURPLE}${BOLD}── Disk Selection & Partitioning ─────────────────────${RESET}\n"
+echo "Available disks:"
+lsblk -d -o NAME,SIZE,MODEL | grep -v "loop"
+echo ""
+
+read -rp "Select target disk (e.g. sda, nvme0n1): " TARGET_DISK
+TARGET_DEV="/dev/$TARGET_DISK"
+
+if [[ ! -b "$TARGET_DEV" ]]; then
+    echo -e "${RED}[FAILED] Invalid block device $TARGET_DEV${RESET}"
+    exit 1
+fi
+
+echo ""
+echo -e "${ORANGE}Partitioning Options:${RESET}"
+echo "1) Automatic partitioning (Erases target disk & creates standard Debian GPT+EFI layout)"
+echo "2) Custom TUI Partition Manager (Delete, Shrink, Enlarge partitions, standard Debian choices)"
+read -rp "Select option [1-2, default: 1]: " PART_CHOICE
+PART_CHOICE="${PART_CHOICE:-1}"
+
+TARGET_ROOT=""
+TARGET_BOOT=""
+
+if [[ "$PART_CHOICE" == "2" ]]; then
+    echo -e "${PURPLE}[SnowFox] Launching Custom TUI Partition Manager...${RESET}"
+    while true; do
+        clear
+        echo -e "${PURPLE}=== Custom TUI Partition Manager ($TARGET_DEV) ===${RESET}"
+        lsblk "$TARGET_DEV"
+        echo ""
+        echo "Actions:"
+        echo "  [s] Shrink a partition (resize2fs + parted)"
+        echo "  [e] Enlarge / Grow a partition (parted + resize2fs)"
+        echo "  [d] Delete a partition"
+        echo "  [c] Create new partition"
+        echo "  [f] Finish partitioning and proceed"
+        read -rp "Choose action [s/e/d/c/f]: " part_act
+        case "$part_act" in
+            s)
+                read -rp "Partition number to shrink (e.g. 2): " pnum
+                read -rp "Filesystem size (e.g. 30G): " fsize
+                read -rp "New partition end size (e.g. 35GB): " psize
+                e2fsck -f -y "${TARGET_DEV}${pnum}" || true
+                resize2fs "${TARGET_DEV}${pnum}" "$fsize" || true
+                parted -s "$TARGET_DEV" resizepart "$pnum" "$psize" || echo "Resize failed"
+                ;;
+            e)
+                read -rp "Partition number to enlarge (e.g. 2): " pnum
+                read -rp "New partition end size (e.g. 80GB or 100%): " psize
+                parted -s "$TARGET_DEV" resizepart "$pnum" "$psize" || echo "Enlarge failed"
+                resize2fs "${TARGET_DEV}${pnum}" || true
+                ;;
+            d)
+                read -rp "Partition number to delete: " pnum
+                parted -s "$TARGET_DEV" rm "$pnum" || echo "Delete failed"
+                ;;
+            c)
+                read -rp "Partition type/size (e.g. mkpart primary ext4 512MiB 100%): " cargs
+                parted -s "$TARGET_DEV" $cargs || echo "Create failed"
+                ;;
+            f)
+                break
+                ;;
+        esac
+    done
+    read -rp "Enter your root partition device (e.g. /dev/sda2 or /dev/nvme0n1p2): " TARGET_ROOT
+    read -rp "Enter your EFI/Boot partition device (e.g. /dev/sda1 or /dev/nvme0n1p1): " TARGET_BOOT
+else
+    echo -e "${PURPLE}[SnowFox] Wiping and creating standard Debian 12 GPT+EFI layout on $TARGET_DEV...${RESET}"
+    wipefs -a "$TARGET_DEV"
+    parted -s "$TARGET_DEV" mklabel gpt
+    parted -s "$TARGET_DEV" mkpart ESP fat32 1MiB 512MiB
+    parted -s "$TARGET_DEV" set 1 esp on
+    parted -s "$TARGET_DEV" mkpart primary ext4 512MiB 100%
+
+    if [[ "$TARGET_DISK" =~ ^nvme ]]; then
+        TARGET_BOOT="${TARGET_DEV}p1"
+        TARGET_ROOT="${TARGET_DEV}p2"
+    else
+        TARGET_BOOT="${TARGET_DEV}1"
+        TARGET_ROOT="${TARGET_DEV}2"
+    fi
+
+    mkfs.fat -F32 "$TARGET_BOOT"
+    mkfs.ext4 -F "$TARGET_ROOT"
+fi
+
+# 3. Fast Installation (< 1 minute via SquashFS extraction)
+clear
+echo -e "${PURPLE}[SnowFox] Installing SnowFoxOS to $TARGET_ROOT (lightning-fast squashfs deployment)...${RESET}"
+
+MOUNT_DIR="/mnt/snowfox-install"
+mkdir -p "$MOUNT_DIR"
+mount "$TARGET_ROOT" "$MOUNT_DIR"
+mkdir -p "$MOUNT_DIR/boot/efi"
+mount "$TARGET_BOOT" "$MOUNT_DIR/boot/efi"
+
+SQUASHFS=""
+for path in \
+    /live/filesystem.squashfs \
+    /run/live/medium/live/filesystem.squashfs \
+    /live/medium/live/filesystem.squashfs \
+    /run/live/rootfs/filesystem.squashfs \
+    /lib/live/mount/medium/live/filesystem.squashfs; do
+    if [[ -f "$path" ]]; then
+        SQUASHFS="$path"
+        break
+    fi
+done
+
+if [[ -n "$SQUASHFS" ]]; then
+    echo "[SnowFox] Extracting compressed filesystem (~under 1 minute)..."
+    unsquashfs -f -d "$MOUNT_DIR" "$SQUASHFS"
+else
+    echo "[WARN] filesystem.squashfs not found, debootstrapping base system..."
+    debootstrap --arch=amd64 bookworm "$MOUNT_DIR" http://deb.debian.org/debian
+fi
+
+# Generate fstab
+echo "UUID=$(blkid -s UUID -o value "$TARGET_ROOT") / ext4 errors=remount-ro 0 1" > "$MOUNT_DIR/etc/fstab"
+echo "UUID=$(blkid -s UUID -o value "$TARGET_BOOT") /boot/efi vfat umask=0077 0 1" >> "$MOUNT_DIR/etc/fstab"
+
+# Bind virtual filesystems
+mount --bind /dev "$MOUNT_DIR/dev"
+mount --bind /proc "$MOUNT_DIR/proc"
+mount --bind /sys "$MOUNT_DIR/sys"
+
+# Configure system in chroot
+cat << EOF > "$MOUNT_DIR/tmp/configure-system.sh"
+export DEBIAN_FRONTEND=noninteractive
+echo "$HOSTNAME" > /etc/hostname
+echo "127.0.0.1 localhost" > /etc/hosts
+echo "127.0.1.1 $HOSTNAME.localdomain $HOSTNAME" >> /etc/hosts
+
+apt-get update -qq
+apt-get install -y -qq locales keyboard-configuration
+echo "$SYS_LANG UTF-8" > /etc/locale.gen
+locale-gen
+update-locale LANG="$SYS_LANG"
+
+echo "XKBLAYOUT=\"$KEYMAP\"" > /etc/default/keyboard
+setupcon --force 2>/dev/null || true
+
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+
+# Create user
+useradd -m -s /bin/bash -G sudo,audio,video,netdev "$TARGET_USER" 2>/dev/null || true
+echo "$TARGET_USER:$TARGET_PASS" | chpasswd
+echo "root:root" | chpasswd
+
+# Install GRUB
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=SnowFoxOS --recheck || grub-install "$TARGET_DISK"
+update-grub
+
+# Register firstboot auto-install service for hardware drivers & final configuration
+systemctl enable snowfox-firstboot.service
+EOF
+
+chmod +x "$MOUNT_DIR/tmp/configure-system.sh"
+
+# Create firstboot service in target
+cat << 'EOF' > "$MOUNT_DIR/etc/systemd/system/snowfox-firstboot.service"
 [Unit]
-Description=SnowFoxOS First Boot Installer
+Description=SnowFoxOS First Boot Setup (Hardware Drivers & Finalization)
 After=network-online.target
 Wants=network-online.target
-ConditionPathExists=/home/$NEW_USER/SnowFoxOS-v3/install.sh
 
 [Service]
-Type=oneshot
-ExecStart=/usr/local/bin/snowfox-auto-install $NEW_USER
-StandardInput=tty
+Type=simple
+ExecStart=/usr/local/bin/snowfox-auto-install
 StandardOutput=journal+console
 StandardError=journal+console
-RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
-FBEOF
+EOF
 
-chroot "$MOUNT_TARGET" systemctl enable snowfox-firstboot.service 2>/dev/null || true
+# Copy auto-install script to target
+cp /usr/local/bin/snowfox-auto-install "$MOUNT_DIR/usr/local/bin/snowfox-auto-install"
+chmod +x "$MOUNT_DIR/usr/local/bin/snowfox-auto-install"
 
-# ── Unmount ───────────────────────────────────────────────────
-info "Finalizing..."
-sync
+# Ensure SnowFoxOS repo is at /home/$TARGET_USER/SnowFoxOS
+if [[ -d /opt/SnowFoxOS ]]; then
+    mkdir -p "$MOUNT_DIR/home/$TARGET_USER/SnowFoxOS"
+    cp -r /opt/SnowFoxOS/* "$MOUNT_DIR/home/$TARGET_USER/SnowFoxOS/"
+    chown -R 1000:1000 "$MOUNT_DIR/home/$TARGET_USER/SnowFoxOS"
+fi
 
-umount "$MOUNT_TARGET/dev/pts" 2>/dev/null || true
-umount "$MOUNT_TARGET/dev"     2>/dev/null || true
-umount "$MOUNT_TARGET/proc"    2>/dev/null || true
-umount "$MOUNT_TARGET/sys"     2>/dev/null || true
-umount "$MOUNT_TARGET/run"     2>/dev/null || true
+chroot "$MOUNT_DIR" /tmp/configure-system.sh
+rm -f "$MOUNT_DIR/tmp/configure-system.sh"
 
-[[ -n "${HOME_PART:-}" ]] && umount "$MOUNT_TARGET/home"     2>/dev/null || true
-[[ -n "${EFI_PART:-}" ]]  && umount "$MOUNT_TARGET/boot/efi" 2>/dev/null || true
-umount "$MOUNT_TARGET" 2>/dev/null || true
+# Cleanup mounts
+umount -lf "$MOUNT_DIR/dev" 2>/dev/null || true
+umount -lf "$MOUNT_DIR/proc" 2>/dev/null || true
+umount -lf "$MOUNT_DIR/sys" 2>/dev/null || true
+umount -lf "$MOUNT_DIR/boot/efi" 2>/dev/null || true
+umount -lf "$MOUNT_DIR" 2>/dev/null || true
 
-# ── Done ─────────────────────────────────────────────────────
 clear
-echo -e "${GREEN}${BOLD}"
-echo "  ╔══════════════════════════════════════════╗"
-echo "  ║   SnowFoxOS v3 installed successfully!   ║"
-echo "  ╚══════════════════════════════════════════╝"
-echo -e "${RESET}"
-echo -e "  User     : ${BOLD}$NEW_USER${RESET}"
-echo -e "  Hostname : ${BOLD}$NEW_HOSTNAME${RESET}"
-echo -e "  Disk     : ${BOLD}$TARGET_DISK${RESET}"
+echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
+echo -e "${GREEN}${BOLD}║       🦊 SnowFoxOS Installation Complete!            ║${RESET}"
+echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════╝${RESET}\n"
+echo -e "SnowFoxOS was successfully installed to your system."
+echo -e "After rebooting, the system will automatically configure hardware"
+echo -e "drivers (AMD, NVIDIA, Intel), Zen Browser, Fresh Editor, and Console Launcher."
 echo ""
-echo -e "${ORANGE}${BOLD}  On first boot, SnowFoxOS will finish configuring"
-echo -e "  the desktop automatically. This takes 3–12 minutes"
-echo -e "  depending on your hardware and internet speed.${RESET}"
-echo ""
-echo -e "${PURPLE}${BOLD}  Remove the USB drive and press ENTER to reboot.${RESET}"
-read -r
-
+read -rp "Press Enter to reboot into your new SnowFoxOS system..."
 reboot
