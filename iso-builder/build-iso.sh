@@ -106,6 +106,7 @@ fi
 apt-get install -y -qq \
     dialog whiptail parted dosfstools ntfs-3g e2fsprogs \
     curl wget git \
+    squashfs-tools debootstrap \
     network-manager \
     i3 polybar rofi dunst i3lock kitty \
     pipewire pipewire-audio wireplumber \
@@ -158,27 +159,26 @@ cp "$SCRIPT_DIR/installer/auto-install.sh"   "$CHROOT_DIR/usr/local/bin/snowfox-
 chmod +x "$CHROOT_DIR/usr/local/bin/snowfox-installer" \
          "$CHROOT_DIR/usr/local/bin/snowfox-auto-install"
 
-# Create systemd service that auto-starts the TUI installer on tty1
-cat << 'EOF' > "$CHROOT_DIR/etc/systemd/system/snowfox-live-installer.service"
-[Unit]
-Description=SnowFoxOS TUI Live Installer
-After=network.target systemd-user-sessions.service
+# Configure passwordless sudo for live user 'user'
+echo "user ALL=(ALL) NOPASSWD: ALL" > "$CHROOT_DIR/etc/sudoers.d/snowfox"
+chmod 0440 "$CHROOT_DIR/etc/sudoers.d/snowfox"
 
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/snowfox-installer
-StandardInput=tty
-StandardOutput=tty
-TTYPath=/dev/tty1
-Restart=always
-User=root
-
-[Install]
-WantedBy=multi-user.target
+# Auto-start installer in live user's profile via sudo.
+# live-config creates default user 'user' and autologins on tty1.
+# Writing to /etc/skel/.profile ensures user 'user' gets the auto-start script.
+cat << 'EOF' > "$CHROOT_DIR/etc/skel/.profile"
+# SnowFoxOS live installer — auto-start
+if [ -t 0 ] && [ -x /usr/local/bin/snowfox-installer ]; then
+    sudo /usr/local/bin/snowfox-installer
+fi
 EOF
+cp "$CHROOT_DIR/etc/skel/.profile" "$CHROOT_DIR/etc/skel/.bash_profile"
 
-chroot "$CHROOT_DIR" systemctl enable snowfox-live-installer.service
-chroot "$CHROOT_DIR" systemctl mask getty@tty1
+# Also pre-create /home/user and set profile files directly
+mkdir -p "$CHROOT_DIR/home/user"
+cp "$CHROOT_DIR/etc/skel/.profile" "$CHROOT_DIR/home/user/.profile"
+cp "$CHROOT_DIR/etc/skel/.bash_profile" "$CHROOT_DIR/home/user/.bash_profile"
+chown -R 1000:1000 "$CHROOT_DIR/home/user"
 
 # 7. Extract kernel & initrd before squashfs compression
 VMLINUZ_SRC="$(ls -1 "$CHROOT_DIR"/boot/vmlinuz-* 2>/dev/null | head -n 1)"
