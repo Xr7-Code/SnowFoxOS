@@ -390,6 +390,75 @@ _tor_status() {
     echo ""
 }
 
+# ─── Restart Tor ─────────────────────────────────────────────
+_tor_restart() {
+    _tor_disable
+    sleep 2
+    _tor_enable
+}
+
+# ─── Root pre-auth (so the spinner never has to prompt) ──────
+_tor_need_root() {
+    sudo -v 2>/dev/null || true
+}
+
+# ─── Gum TUI — Tor proxy ─────────────────────────────────────
+_tor_tui() {
+    while true; do
+        local mode="inactive"
+        [[ -f "$TOR_MODE_FILE" ]] && mode="active"
+        local svc="stopped"
+        _tor_service_running && svc="running"
+
+        sf_banner "Tor Proxy"
+        sf_note "Mode: $mode · Service: $svc · fail-closed while active"
+
+        local choice st
+        choice=$(sf_choose "Tor transparent proxy" 9 \
+            "🟢  Enable Tor mode" \
+            "🔴  Disable Tor mode" \
+            "📊  Show status" \
+            "🔁  Restart Tor" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+        local tmp
+        case "$choice" in
+            *"Enable Tor"*)
+                sf_yesno "Enable Tor mode? All traffic will be routed through Tor (fail-closed)." "Enable" "Cancel" no || continue
+                _tor_need_root
+                tmp=$(mktemp)
+                sf_spin_do "Enabling Tor mode…" _tor_enable "$tmp"
+                sf_page "Tor — Enable" "$tmp"
+                rm -f "$tmp"
+                ;;
+            *"Disable Tor"*)
+                sf_yesno "Disable Tor mode and restore normal networking?" "Disable" "Cancel" no || continue
+                _tor_need_root
+                tmp=$(mktemp)
+                sf_spin_do "Disabling Tor mode…" _tor_disable "$tmp"
+                sf_page "Tor — Disable" "$tmp"
+                rm -f "$tmp"
+                ;;
+            *Status*)
+                tmp=$(mktemp)
+                sf_spin_do "Checking Tor status…" _tor_status "$tmp"
+                sf_page "Tor — Status" "$tmp"
+                rm -f "$tmp"
+                ;;
+            *Restart*)
+                sf_yesno "Restart Tor? Tor mode is briefly disabled and re-enabled." "Restart" "Cancel" no || continue
+                _tor_need_root
+                tmp=$(mktemp)
+                sf_spin_do "Restarting Tor…" _tor_restart "$tmp"
+                sf_page "Tor — Restart" "$tmp"
+                rm -f "$tmp"
+                ;;
+        esac
+    done
+}
+
 # ─── Main command ────────────────────────────────────────────
 cmd_tor() {
     case "$1" in
@@ -399,13 +468,14 @@ cmd_tor() {
         off|disable)
             _tor_disable
             ;;
-        status|"")
+        status)
             _tor_status
             ;;
+        "")
+            if sf_can_tui; then _tor_tui; else _tor_status; fi
+            ;;
         restart)
-            _tor_disable
-            sleep 2
-            _tor_enable
+            _tor_restart
             ;;
         *)
             header "snowfox tor"

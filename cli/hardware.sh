@@ -8,15 +8,28 @@
 # snowfox gpu — GPU information (read-only)
 # ============================================================
 cmd_gpu() {
-    header "GPU Information"
+    if [[ -z "${1:-}" ]] && sf_can_tui; then
+        local tmp
+        tmp=$(mktemp)
+        sf_spin_do "Reading GPU information…" _gpu_report "$tmp"
+        sf_page "GPU Information" "$tmp"
+        rm -f "$tmp"
+        return 0
+    fi
 
+    header "GPU Information"
+    _gpu_report
+}
+
+# ── Plain report (shared by CLI and TUI) ─────────────────────
+_gpu_report() {
     # ── Detect GPUs via lspci ────────────────────────────────
     local -a GPUS
     mapfile -t GPUS < <(lspci 2>/dev/null | grep -iE "VGA|3D|Display")
 
     if [[ ${#GPUS[@]} -eq 0 ]]; then
         warn "No GPU detected via lspci"
-        exit 0
+        return 0
     fi
 
     section "Detected GPUs"
@@ -140,19 +153,27 @@ cmd_gpu() {
 # snowfox kill — Hardware kill switches
 # ============================================================
 cmd_kill() {
-    case "$1" in
+    local action="${1:-}"
+
+    # ── Gum TUI: kill switch menu ────────────────────────────
+    if [[ -z "$action" ]] && sf_can_tui; then
+        _kill_tui
+        return 0
+    fi
+
+    case "$action" in
         mic)
             local MIC_ID
             MIC_ID=$(pactl list sources short 2>/dev/null | grep -v monitor | awk '{print $1}' | head -1)
             if [[ -z "$MIC_ID" ]]; then
                 err "No microphone found."
-                exit 1
+                return 1
             fi
             pactl set-source-mute "$MIC_ID" 1 2>/dev/null && \
                 ok "Microphone disabled." || err "Failed to disable microphone."
             ;;
         cam)
-            if ls /dev/video* &>/dev/null; then
+            if ls /dev/video* &>/dev/null || lsmod 2>/dev/null | grep -q "^uvcvideo"; then
                 sudo modprobe -r uvcvideo 2>/dev/null && \
                     ok "Camera disabled." || err "Failed to disable camera."
             else
@@ -174,18 +195,100 @@ cmd_kill() {
             sudo modprobe uvcvideo 2>/dev/null && ok "Camera re-enabled." || true
             sudo rfkill unblock all && ok "Wireless re-enabled."
             ;;
+        status)
+            _kill_status
+            ;;
         *)
-            err "Usage: snowfox kill [mic|cam|all|restore]"
-            exit 1
+            if [[ -z "$action" ]]; then
+                _kill_status
+                return 0
+            fi
+            err "Usage: snowfox kill [mic|cam|all|restore|status]"
+            return 1
             ;;
     esac
+}
+
+# ── Status rows (shared by CLI and TUI) ──────────────────────
+_kill_status_rows() {
+    # Microphone
+    local MIC_ID MIC_MUTE
+    MIC_ID=$(pactl list sources short 2>/dev/null | grep -v monitor | awk '{print $1}' | head -1)
+    if [[ -z "$MIC_ID" ]]; then
+        row "Microphone" "none found" "$DGRAY"
+    else
+        MIC_MUTE=$(pactl get-source-mute "$MIC_ID" 2>/dev/null | awk '{print $2}')
+        if [[ "$MIC_MUTE" == "yes" ]]; then
+            row "Microphone" "muted — killed" "$RED"
+        else
+            row "Microphone" "active" "$GREEN"
+        fi
+    fi
+
+    # Camera
+    if lsmod 2>/dev/null | grep -q "^uvcvideo"; then
+        row "Camera" "driver loaded — active" "$GREEN"
+    elif modinfo uvcvideo &>/dev/null 2>&1; then
+        row "Camera" "disabled — killed" "$RED"
+    else
+        row "Camera" "none found" "$DGRAY"
+    fi
+
+    # Wireless
+    if rfkill list all 2>/dev/null | grep -q "blocked: yes"; then
+        row "Wireless" "blocked — killed" "$RED"
+    else
+        row "Wireless" "active" "$GREEN"
+    fi
+}
+
+_kill_status() {
+    header "Kill Switches"
+    _kill_status_rows
+    echo ""
+    info "Commands: snowfox kill <mic|cam|all|restore|status>"
+    echo ""
+}
+
+_kill_tui() {
+    while true; do
+        sf_banner "Kill Switches"
+        _kill_status_rows
+
+        local choice st
+        choice=$(sf_choose "Hardware kill switches" 8 \
+            "🎤  Mute microphone" \
+            "📷  Disable camera" \
+            "🧨  Full silence mode (mic + cam + radios)" \
+            "🔄  Restore all devices" \
+            "📊  Refresh status" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+        case "$choice" in
+            *microphone*) cmd_kill mic ;;
+            *camera*)     cmd_kill cam ;;
+            *silence*)    cmd_kill all ;;
+            *Restore*)    cmd_kill restore ;;
+        esac
+        sleep 1
+    done
 }
 
 # ============================================================
 # snowfox air — Airplane mode (all wireless off)
 # ============================================================
 cmd_air() {
-    case "$1" in
+    local action="${1:-}"
+
+    # ── Gum TUI: air mode menu ───────────────────────────────
+    if [[ -z "$action" ]] && sf_can_tui; then
+        _air_tui
+        return 0
+    fi
+
+    case "$action" in
         on)
             fox "Enabling air mode..."
             sudo rfkill block all
@@ -210,7 +313,33 @@ cmd_air() {
             ;;
         *)
             err "Usage: snowfox air [on|off|status]"
-            exit 1
+            return 1
             ;;
     esac
+}
+
+_air_tui() {
+    while true; do
+        sf_banner "Air Mode"
+        if rfkill list all 2>/dev/null | grep -q "blocked: yes"; then
+            sf_note "Status: ACTIVE — all wireless interfaces are off"
+        else
+            sf_note "Status: off — wireless interfaces are active"
+        fi
+
+        local choice st
+        choice=$(sf_choose "Air mode" 5 \
+            "✈️   Enable — disable all wireless" \
+            "📶  Disable — restore wireless" \
+            "📊  Refresh status" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+        case "$choice" in
+            *Enable*)  cmd_air on ;;
+            *Disable*) cmd_air off ;;
+        esac
+        sleep 1
+    done
 }

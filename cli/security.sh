@@ -8,7 +8,15 @@
 # snowfox audit — Active network connections
 # ============================================================
 cmd_audit() {
-    case "$1" in
+    local mode="${1:-}"
+
+    # ── Gum TUI: audit menu ──────────────────────────────────
+    if [[ -z "$mode" ]] && sf_can_tui; then
+        _audit_tui
+        return 0
+    fi
+
+    case "$mode" in
         live|ongoing|l)
             _audit_live
             ;;
@@ -17,9 +25,36 @@ cmd_audit() {
             ;;
         *)
             err "Usage: snowfox audit [live]"
-            exit 1
+            return 1
             ;;
     esac
+}
+
+_audit_tui() {
+    while true; do
+        sf_banner "Network Audit"
+
+        local choice st
+        choice=$(sf_choose "Active network connections" 5 \
+            "📸  Snapshot — one-shot list" \
+            "🔴  Live view — refresh every 2s" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+        case "$choice" in
+            *Snapshot*)
+                local tmp
+                tmp=$(mktemp)
+                sf_spin_do "Inspecting connections…" _audit_snapshot "$tmp"
+                sf_page "Network Audit" "$tmp"
+                rm -f "$tmp"
+                ;;
+            *Live*)
+                _audit_live
+                ;;
+        esac
+    done
 }
 
 # ─── One-shot snapshot ───────────────────────────────────────
@@ -28,7 +63,7 @@ _audit_snapshot() {
 
     if ! command -v ss &>/dev/null; then
         err "ss not found — install iproute2"
-        exit 1
+        return 1
     fi
 
     local has_root=false
@@ -82,12 +117,12 @@ _audit_snapshot() {
 _audit_live() {
     if ! command -v ss &>/dev/null; then
         err "ss not found — install iproute2"
-        exit 1
+        return 1
     fi
 
     if ! command -v watch &>/dev/null; then
         err "watch not found — install procps"
-        exit 1
+        return 1
     fi
 
     info "Live audit — press Ctrl+C to exit."

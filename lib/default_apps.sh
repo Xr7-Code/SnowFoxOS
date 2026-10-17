@@ -96,6 +96,44 @@ success "yt-dlp installed"
 apt-get install -y nodejs 2>/dev/null || true
 success "Node.js installed (JS runtime for yt-dlp)"
 
+# ── gum — Charm TUI toolkit for the snowfox CLI ──────────────
+# Powers the control center ("snowfox") and every command TUI
+# (music, stash, settings, network, snapshots, AI, …).
+# Debian 12 has no gum package, so fall back to the official
+# prebuilt binary from GitHub releases (arch-aware).
+if command -v gum &>/dev/null; then
+    info "gum already installed"
+else
+    info "Installing gum (TUI toolkit for the snowfox CLI)..."
+    GUM_OK="false"
+    if apt-get install -y gum 2>/dev/null; then
+        GUM_OK="true"
+    else
+        case "$(uname -m)" in
+            x86_64|amd64)  GUM_ARCH="x86_64" ;;
+            aarch64|arm64) GUM_ARCH="arm64" ;;
+            armv7l)        GUM_ARCH="armv7" ;;
+            armv6l)        GUM_ARCH="armv6" ;;
+            i386|i686)     GUM_ARCH="i386" ;;
+            *)             GUM_ARCH="" ;;
+        esac
+        GUM_VER=$(curl -sf "https://api.github.com/repos/charmbracelet/gum/releases/latest" 2>/dev/null \
+            | python3 -c "import sys, json; print(json.load(sys.stdin).get('tag_name', '').lstrip('v'))" 2>/dev/null)
+        if [[ -n "$GUM_ARCH" && -n "$GUM_VER" ]]; then
+            if curl -fsSL "https://github.com/charmbracelet/gum/releases/download/v${GUM_VER}/gum_${GUM_VER}_Linux_${GUM_ARCH}.tar.gz" \
+                | tar -xz --wildcards -C /usr/local/bin --strip-components=1 'gum_*/gum' 2>/dev/null; then
+                chmod +x /usr/local/bin/gum
+                GUM_OK="true"
+            fi
+        fi
+    fi
+    if [[ "$GUM_OK" == "true" ]]; then
+        success "gum installed"
+    else
+        warn "gum could not be installed — snowfox TUIs will show manual instructions"
+    fi
+fi
+
 # ── Clone SnowFox Console Launcher ───────────────────────────
 info "Cloning SnowFox Console Launcher..."
 if git clone https://github.com/Xr7-Code/SnowFox-Console-Launcher \

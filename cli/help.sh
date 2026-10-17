@@ -1,10 +1,10 @@
 #!/bin/bash
 # ============================================================
-#  SnowFoxOS — CLI Module: Help & Command Overview
-#  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+#  snowfox help — command overview
+#  _help_render prints the overview; cmd_help shows it in the
+#  Gum pager when running inside the TUI.
 # ============================================================
-
-cmd_help() {
+_help_render() {
     echo ""
     echo -e "${PURPLE}${BOLD}  ┌────────────────────────────────────────────────┐${RESET}"
     echo -e "${PURPLE}${BOLD}  │                                                │${RESET}"
@@ -23,6 +23,12 @@ cmd_help() {
         local cmd="$1" desc="$2"
         printf "  ${CYAN}${BOLD}  %-40s${RESET}${DGRAY}%s${RESET}\n" "$cmd" "$desc"
     }
+
+    _help_section "Get Started"
+    _help_cmd "snowfox"                        "Gum control center (interactive terminal)"
+    _help_cmd "snowfox tui"                    "Gum control center (always)"
+    _help_cmd "snowfox help"                   "This command overview"
+    echo ""
 
     _help_section "System & Status"
     _help_cmd "snowfox st"                       "System overview"
@@ -105,6 +111,22 @@ cmd_help() {
     echo ""
 
     divider
+    info "Interactive terminal: every command without arguments opens its Gum TUI."
+    info "Scripts / CI:          SNOWFOX_TUI=0 snowfox <command>   (plain output)"
     info "snowfox <command> --help  for details on a command"
     echo ""
+}
+
+# ── TUI wrapper: render into the Gum pager ───────────────────
+cmd_help() {
+    if ! sf_can_tui; then
+        _help_render
+        return
+    fi
+
+    local tmp
+    tmp=$(mktemp)
+    _help_render > "$tmp"
+    sf_page "Help" "$tmp"
+    rm -f "$tmp"
 }

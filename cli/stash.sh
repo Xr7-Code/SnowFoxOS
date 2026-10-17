@@ -80,7 +80,13 @@ _stash_preview_size() {
 # snowfox stash — Main dispatcher
 # ============================================================
 cmd_stash() {
-    if [[ -z "$1" ]]; then
+    # ── Gum TUI: interactive package manager ─────────────────
+    if [[ -z "${1:-}" ]] && sf_can_tui; then
+        _stash_tui
+        return 0
+    fi
+
+    if [[ -z "${1:-}" ]]; then
         _stash_categories
         return
     fi
@@ -156,7 +162,7 @@ _stash_upgrade() {
     read -rp "$(echo -e "${PURPLE}${BOLD}Upgrade all? [y/N]: ${RESET}")" CONFIRM
     if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
         info "Cancelled."
-        return
+        return 0
     fi
 
     echo ""
@@ -169,7 +175,7 @@ _stash_upgrade() {
         ok "Upgrade complete."
     else
         err "Upgrade failed. Log: /tmp/stash-upgrade.log"
-        exit 1
+        return 1
     fi
     sudo apt-get autoremove -y >> /tmp/stash-upgrade.log 2>&1
     echo ""
@@ -230,7 +236,7 @@ _stash_find() {
 
     if [[ -z "$query" ]]; then
         err "Usage: snowfox stash find <query>"
-        exit 1
+        return 1
     fi
 
     header "stash — Search: $query"
@@ -240,7 +246,7 @@ _stash_find() {
 
     if [[ -z "$results" ]]; then
         info "No results for '$query'."
-        exit 0
+        return 0
     fi
 
     while IFS= read -r line; do
@@ -267,12 +273,12 @@ _stash_info() {
 
     if [[ -z "$pkg" ]]; then
         err "Usage: snowfox stash info <package>"
-        exit 1
+        return 1
     fi
 
     if ! apt-cache show "$pkg" &>/dev/null; then
         err "Package '$pkg' not found."
-        exit 1
+        return 1
     fi
 
     header "stash — $pkg"
@@ -306,18 +312,18 @@ _stash_install() {
 
     if [[ -z "$pkg" ]]; then
         err "Usage: snowfox stash install <package>"
-        exit 1
+        return 1
     fi
 
     if ! apt-cache show "$pkg" &>/dev/null; then
         err "Package '$pkg' not found."
         info "  Search: snowfox stash find <query>"
-        exit 1
+        return 1
     fi
 
     if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
         info "Package '$pkg' is already installed."
-        exit 0
+        return 0
     fi
 
     header "stash — Install: $pkg"
@@ -337,7 +343,7 @@ _stash_install() {
     read -rp "$(echo -e ${PURPLE}${BOLD}"Install? [y/N]: "${RESET})" CONFIRM
     if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
         info "Cancelled."
-        exit 0
+        return 0
     fi
 
     echo ""
@@ -351,7 +357,7 @@ _stash_install() {
     else
         err "Installation failed."
         info "  Log: /tmp/stash-install.log"
-        exit 1
+        return 1
     fi
 }
 
@@ -406,18 +412,18 @@ _stash_remove() {
     if [[ -z "$pkg" ]]; then
         err "Usage: snowfox stash remove <package>"
         info "  List installed: snowfox stash list"
-        exit 1
+        return 1
     fi
 
     if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
         err "Package '$pkg' is not installed."
-        exit 1
+        return 1
     fi
 
     if _stash_is_protected "$pkg"; then
         err "'$pkg' is a system component and cannot be removed."
         warn "Removing it would break SnowFoxOS."
-        exit 1
+        return 1
     fi
 
     header "stash — Remove: $pkg"
@@ -434,7 +440,7 @@ _stash_remove() {
     read -rp "$(echo -e ${ORANGE}${BOLD}"Remove $pkg? [y/N]: "${RESET})" CONFIRM
     if [[ ! "$CONFIRM" =~ ^[yY]$ ]]; then
         info "Cancelled."
-        exit 0
+        return 0
     fi
 
     echo ""
@@ -449,6 +455,261 @@ _stash_remove() {
     else
         err "Removal failed."
         info "  Log: /tmp/stash-remove.log"
-        exit 1
+        return 1
     fi
+}
+
+# ============================================================
+#  Gum TUI — Software Stash
+# ============================================================
+_stash_tui() {
+    while true; do
+        sf_banner "Software Stash"
+
+        local installed_total
+        installed_total=$(dpkg -l 2>/dev/null | grep -c "^ii")
+        sf_note "$installed_total packages installed · curated catalog + apt search"
+
+        local choice st
+        choice=$(sf_choose "What would you like to do?" 9 \
+            "📂  Browse categories" \
+            "🔍  Search apt repositories" \
+            "📋  Installed applications" \
+            "⬆️   Upgrade all packages" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+        case "$choice" in
+            *categories*)  _stash_tui_categories ;;
+            *Search*)      _stash_tui_search ;;
+            *Installed*)   _stash_tui_installed ;;
+            *Upgrade*)     _stash_tui_upgrade ;;
+        esac
+    done
+}
+
+_stash_tui_categories() {
+    local cats=(internet office ide media gaming games ai security development system network multimedia)
+    local -a display=()
+    local c
+    for c in "${cats[@]}"; do
+        display+=("📦  $c  ($(echo "${STASH_CATEGORIES[$c]}" | wc -w) packages)")
+    done
+    display+=("↩   Back")
+
+    local choice st
+    choice=$(sf_choose "Category" 15 "${display[@]}")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+    local cat
+    cat=$(echo "$choice" | awk '{print $2}')
+    [[ -z "${STASH_CATEGORIES[$cat]:-}" ]] && return 0
+
+    local -a entries=()
+    local pkg status
+    for pkg in ${STASH_CATEGORIES[$cat]}; do
+        if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+            status="✅ installed"
+        elif apt-cache show "$pkg" &>/dev/null; then
+            status="⬇️  available"
+        else
+            status="❌ unavailable"
+        fi
+        entries+=("$pkg  $status")
+    done
+
+    local pkg_line
+    pkg_line=$(printf '%s\n' "${entries[@]}" | sf_filter "stash · $cat" "Type to filter — Enter for actions" 12)
+    st=$?
+    [[ $st -ne 0 || -z "$pkg_line" ]] && return 0
+
+    pkg=$(echo "$pkg_line" | awk '{print $1}')
+    [[ -n "$pkg" ]] && _stash_tui_package "$pkg"
+}
+
+_stash_tui_search() {
+    local q
+    q=$(sf_ask_ph "Search apt repositories" "e.g. editor, video, python")
+    [[ -z "$q" ]] && return 0
+
+    local tmp
+    tmp=$(mktemp)
+    gum spin --spinner dot \
+        --title "Searching apt for \"$q\"…" \
+        --spinner.foreground "$GUM_PURPLE_LT" \
+        --title.foreground "$GUM_FG" \
+        -- bash -c 'apt-cache search "$1" 2>/dev/null | head -80 > "$2"' _ "$q" "$tmp"
+
+    if [[ ! -s "$tmp" ]]; then
+        err "No results for '$q'."
+        rm -f "$tmp"
+        sleep 1.2
+        return 0
+    fi
+
+    local line st
+    line=$(sf_filter "Results for \"$q\"" "Type to filter — Enter for actions" 15 < "$tmp")
+    st=$?
+    rm -f "$tmp"
+    [[ $st -ne 0 || -z "$line" ]] && return 0
+
+    local pkg
+    pkg=$(echo "$line" | cut -d' ' -f1)
+    [[ -n "$pkg" ]] && _stash_tui_package "$pkg"
+}
+
+_stash_tui_installed() {
+    local -a entries=()
+    local dir file app pkg
+
+    for dir in /usr/share/applications "$HOME/.local/share/applications"; do
+        [[ -d "$dir" ]] || continue
+        for file in "$dir"/*.desktop; do
+            [[ -e "$file" ]] || continue
+            grep -q "^NoDisplay=true" "$file" 2>/dev/null && continue
+            app=$(grep -m1 "^Name=" "$file" | cut -d= -f2-)
+            [[ -z "$app" ]] && app=$(basename "$file" .desktop)
+            pkg=$(dpkg -S "applications/$(basename "$file")" 2>/dev/null | cut -d: -f1 | head -1)
+            [[ -z "$pkg" ]] && pkg="(manual)"
+            entries+=("$app — $pkg")
+        done
+    done
+
+    if [[ ${#entries[@]} -eq 0 ]]; then
+        info "No applications found."
+        sleep 1.2
+        return 0
+    fi
+
+    local line st
+    line=$(printf '%s\n' "${entries[@]}" | sf_filter "Installed applications" "Type to filter — Enter for actions" 15)
+    st=$?
+    [[ $st -ne 0 || -z "$line" ]] && return 0
+
+    pkg="${line##*— }"
+    [[ -z "$pkg" || "$pkg" == "(manual)" ]] && return 0
+    _stash_tui_package "$pkg"
+}
+
+_stash_tui_package() {
+    local pkg="$1"
+    local installed=false
+    dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && installed=true
+
+    local -a actions=("👁   Show details")
+    if $installed; then
+        actions+=("🗑   Remove package")
+    else
+        actions+=("⬇   Install package")
+    fi
+    actions+=("↩   Back")
+
+    local choice st
+    choice=$(sf_choose "$pkg" 5 "${actions[@]}")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" ]] && return 0
+
+    case "$choice" in
+        *details*) _stash_tui_info "$pkg" ;;
+        *Install*) _stash_tui_install "$pkg" ;;
+        *Remove*)  _stash_tui_remove "$pkg" ;;
+    esac
+}
+
+_stash_tui_info() {
+    local pkg="$1" tmp
+    tmp=$(mktemp)
+    _stash_info "$pkg" > "$tmp" 2>&1
+    sf_page "stash · $pkg" "$tmp"
+    rm -f "$tmp"
+}
+
+_stash_tui_install() {
+    local pkg="$1"
+
+    if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+        ok "'$pkg' is already installed."
+        sleep 1
+        return 0
+    fi
+    if ! apt-cache show "$pkg" &>/dev/null; then
+        err "Package '$pkg' not found."
+        sleep 1.2
+        return 1
+    fi
+
+    local size
+    size=$(_stash_preview_size "$pkg")
+
+    if ! sf_yesno "Install '$pkg'? (download: $size)" "Install" "Cancel" yes; then
+        return 0
+    fi
+
+    echo ""
+    sudo apt-get install -y "$pkg"
+    if [[ $? -eq 0 ]]; then
+        ok "$pkg installed."
+    else
+        err "Installation failed — see the output above."
+    fi
+    sf_pause "Press Enter to continue…"
+}
+
+_stash_tui_remove() {
+    local pkg="$1"
+
+    if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+        err "Package '$pkg' is not installed."
+        sleep 1.2
+        return 1
+    fi
+    if _stash_is_protected "$pkg"; then
+        err "'$pkg' is a system component and cannot be removed."
+        sleep 1.5
+        return 1
+    fi
+
+    if ! sf_yesno "Remove '$pkg' and clean up unused dependencies?" "Remove" "Cancel" no; then
+        return 0
+    fi
+
+    echo ""
+    sudo apt-get purge -y "$pkg"
+    local rc=$?
+    sudo apt-get autoremove -y
+    if [[ $rc -eq 0 ]]; then
+        ok "$pkg removed."
+    else
+        err "Removal failed — see the output above."
+    fi
+    sf_pause "Press Enter to continue…"
+}
+
+_stash_tui_upgrade() {
+    local updates
+    updates=$(apt-get --simulate upgrade 2>/dev/null | grep "^Inst" | wc -l)
+
+    if [[ "$updates" -eq 0 ]]; then
+        ok "All packages are up to date."
+        sleep 1.2
+        return 0
+    fi
+
+    sf_note "$updates package(s) can be upgraded"
+    if ! sf_yesno "Upgrade all $updates packages now?" "Upgrade" "Cancel" no; then
+        return 0
+    fi
+
+    echo ""
+    sudo apt-get upgrade -y
+    local rc=$?
+    sudo apt-get autoremove -y
+    if [[ $rc -eq 0 ]]; then
+        ok "Upgrade complete."
+    else
+        err "Upgrade failed — see the output above."
+    fi
+    sf_pause "Press Enter to continue…"
 }

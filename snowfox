@@ -26,6 +26,7 @@ fi
 
 # ── Load modules ─────────────────────────────────────────────
 source "$CLI_DIR/utils.sh"
+source "$CLI_DIR/gum.sh"          # shared Gum TUI library
 source "$CLI_DIR/status.sh"
 source "$CLI_DIR/system.sh"
 source "$CLI_DIR/hardware.sh"
@@ -33,6 +34,7 @@ source "$CLI_DIR/media.sh"
 source "$CLI_DIR/music.sh"
 source "$CLI_DIR/security.sh"
 source "$CLI_DIR/desktop.sh"
+source "$CLI_DIR/network.sh"
 source "$CLI_DIR/stash.sh"
 source "$CLI_DIR/settings.sh"
 source "$CLI_DIR/doctor.sh"
@@ -41,6 +43,10 @@ source "$CLI_DIR/ai.sh"
 source "$CLI_DIR/snap.sh"
 source "$CLI_DIR/tor.sh"
 source "$CLI_DIR/help.sh"
+source "$CLI_DIR/tui.sh"          # main Gum control center
+
+# ── TUI detection (gum + interactive terminal) ───────────────
+sf_tui_detect
 
 # ── Version ──────────────────────────────────────────────────
 if [[ "$1" == "-v" ]] || [[ "$1" == "v" ]] || [[ "$1" == "version" ]]; then
@@ -51,13 +57,15 @@ fi
 
 # ── Dispatcher ───────────────────────────────────────────────
 case "$1" in
-    # ── Help ─────────────────────────────────────────────────
-    h|help|"")      cmd_help ;;
+    # ── Help & TUI ───────────────────────────────────────────
+    h|help)         cmd_help ;;
+    tui|menu)       cmd_tui force ;;
+    "")             cmd_tui ;;
 
     # ── System & Status ──────────────────────────────────────
     st|status)      cmd_status ;;
     bat|battery)    cmd_battery ;;
-    up|update)      cmd_update ;;
+    up|update)      cmd_update "$2" ;;
     prof|profile)   cmd_profile "$2" ;;
     doc|doctor)     cmd_doctor ;;
     rst|reset)      function_reset_system ;;
@@ -76,13 +84,13 @@ case "$1" in
     music|m)        cmd_music ;;
 
     # ── Desktop ──────────────────────────────────────────────
-    auto|autostart) cmd_start "$2" "$3" ;;
+    auto|autostart) cmd_start "$2" ;;
     lay|layout)     cmd_layout "$2" ;;
     stash)          shift; cmd_stash "$@" ;;
     web|webapp)     cmd_webapp "$2" "$3" "$4" ;;
-    net|network)    exec ~/.config/snowfox-network.sh ;;
-    wall|wallpaper) exec ~/.config/snowfox-wallpaper.sh ;;
-    disp|display)   exec ~/.config/snowfox-display.sh ;;
+    net|network)    cmd_network "$2" ;;
+    wall|wallpaper) cmd_wallpaper "$2" ;;
+    disp|display)   cmd_display "$2" ;;
     lock)           exec ~/.config/snowfox-lock.sh ;;
 
     # ── Settings ─────────────────────────────────────────────

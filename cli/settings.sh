@@ -53,15 +53,22 @@ set_setting() {
 # snowfox set — Terminal overview
 # ============================================================
 cmd_settings() {
-    local subcmd="$1"
+    local subcmd="${1:-}"
 
     case "$subcmd" in
-        gui) cmd_settings_gui ;;
-        "")  cmd_settings_overview ;;
+        gui)      cmd_settings_gui ;;
+        overview) cmd_settings_overview ;;
+        "")
+            if sf_can_tui; then
+                _settings_tui
+            else
+                cmd_settings_overview
+            fi
+            ;;
         *)
             err "Unknown settings subcommand: $subcmd"
-            info "  Usage: snowfox set [gui]"
-            exit 1
+            info "  Usage: snowfox set [overview|gui]"
+            return 1
             ;;
     esac
 }
@@ -128,13 +135,13 @@ cmd_settings_gui() {
     if ! command -v rofi &>/dev/null; then
         err "Rofi not installed — graphical settings unavailable"
         info "  Use the terminal interface: snowfox set"
-        exit 1
+        return 1
     fi
 
     if [[ -z "$DISPLAY" ]]; then
         err "No graphical session (DISPLAY not set)"
         info "  Use the terminal interface: snowfox set"
-        exit 1
+        return 1
     fi
 
     local ROFI_THEME="$HOME/.config/rofi/config.rasi"
@@ -146,7 +153,7 @@ cmd_settings_gui() {
             "  Default Applications\n  Keyboard Layout\n  System Language\n  Timezone\n  Bluetooth\n  User Management\n  ─────────────────────────────\n  Back" \
             | rofi -dmenu -p "🦊 Settings" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 420 -lines 10)
 
-        [[ -z "$CHOICE" ]] && exit 0
+        [[ -z "$CHOICE" ]] && return 0
 
         case "$CHOICE" in
             *"Default Applications"*) _gui_defaults ;;
@@ -155,7 +162,7 @@ cmd_settings_gui() {
             *"Timezone"*)             _gui_timezone ;;
             *"Bluetooth"*)            _gui_bluetooth ;;
             *"User Management"*)      _gui_user ;;
-            *"Back"*)                 exit 0 ;;
+            *"Back"*)                 return 0 ;;
         esac
     done
 }
@@ -282,6 +289,272 @@ _gui_user() {
 }
 
 # ============================================================
+#  Gum TUI — Settings manager
+# ============================================================
+_settings_tui() {
+    while true; do
+        sf_banner "Settings"
+        sf_note "System preferences · defaults stored in $CONFIG_FILE"
+
+        local choice st
+        choice=$(sf_choose "What would you like to configure?" 11 \
+            "🌐  Default Applications" \
+            "⌨️   Keyboard Layout" \
+            "🌍  System Language" \
+            "🕒  Timezone" \
+            "🔵  Bluetooth" \
+            "👤  User Management" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+        case "$choice" in
+            *"Default Applications"*) _defaults_tui ;;
+            *Keyboard*)               _keyboard_tui ;;
+            *Language*)               _language_tui ;;
+            *Timezone*)               _timezone_tui ;;
+            *Bluetooth*)              _bt_tui ;;
+            *User*)                   _user_tui ;;
+        esac
+    done
+}
+
+# ── Default applications ─────────────────────────────────────
+_defaults_tui() {
+    local browser terminal editor fm
+    browser=$(get_setting DEFAULT_BROWSER zen-browser)
+    terminal=$(get_setting DEFAULT_TERMINAL kitty)
+    editor=$(get_setting DEFAULT_EDITOR geany)
+    fm=$(get_setting DEFAULT_FILEMANAGER pcmanfm)
+
+    sf_banner "Default Applications"
+
+    local choice st
+    choice=$(sf_choose "Pick an application class to change" 9 \
+        "🌐  Browser       — $browser" \
+        "💻  Terminal      — $terminal" \
+        "📝  Editor        — $editor" \
+        "📁  File manager  — $fm" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+    local key label current
+    case "$choice" in
+        *Browser*)        key="DEFAULT_BROWSER";     label="browser";      current="$browser"  ;;
+        *Terminal*)       key="DEFAULT_TERMINAL";    label="terminal";     current="$terminal" ;;
+        *Editor*)         key="DEFAULT_EDITOR";      label="editor";       current="$editor"   ;;
+        *"File manager"*) key="DEFAULT_FILEMANAGER"; label="file manager"; current="$fm"       ;;
+        *) return 0 ;;
+    esac
+
+    local new
+    new=$(sf_ask "New command for the $label" "$current")
+    [[ -z "$new" ]] && return 0
+
+    if ! command -v "${new%% *}" &>/dev/null; then
+        sf_confirm "'${new%% *}' is not installed — save anyway?" "Save" "Cancel" no || return 0
+    fi
+
+    set_setting "$key" "$new"
+    ok "Default $label set to '$new'."
+    sleep 1.2
+}
+
+# ── Keyboard layout ──────────────────────────────────────────
+_keyboard_tui() {
+    local current
+    current=$(localectl status 2>/dev/null | grep "X11 Layout" | awk '{print $3}')
+    current="${current:-de}"
+
+    sf_banner "Keyboard Layout"
+    sf_note "Current layout: $current"
+
+    local choice st
+    choice=$(sf_choose "Select a keyboard layout" 11 \
+        "de   — German" \
+        "us   — English (US)" \
+        "gb   — English (UK)" \
+        "fr   — French" \
+        "es   — Spanish" \
+        "it   — Italian" \
+        "✏️   Custom layout code…" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+    local layout
+    if [[ "$choice" == *Custom* ]]; then
+        layout=$(sf_ask "Layout code (e.g. de, us, dvorak)" "$current")
+    else
+        layout=$(echo "$choice" | awk '{print $1}')
+    fi
+    [[ -z "$layout" ]] && return 0
+
+    if sudo localectl set-x11-keymap "$layout" 2>/dev/null; then
+        ok "Keyboard layout set to '$layout'."
+        setxkbmap "$layout" 2>/dev/null || true
+    else
+        err "Could not set keyboard layout '$layout'."
+    fi
+    sleep 1.5
+}
+
+# ── System language ──────────────────────────────────────────
+_language_tui() {
+    local current
+    current=$(localectl status 2>/dev/null | grep "System Locale" | cut -d'=' -f2)
+    current="${current:-en_US.UTF-8}"
+
+    sf_banner "System Language"
+    sf_note "Current locale: $current"
+
+    local choice st
+    choice=$(sf_choose "Select a system language" 11 \
+        "en_US.UTF-8  — English (US)" \
+        "en_GB.UTF-8  — English (UK)" \
+        "de_DE.UTF-8  — German" \
+        "de_AT.UTF-8  — German (Austria)" \
+        "fr_FR.UTF-8  — French" \
+        "es_ES.UTF-8  — Spanish" \
+        "✏️   Custom locale…" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+    local locale
+    if [[ "$choice" == *Custom* ]]; then
+        locale=$(sf_ask "Locale (e.g. en_US.UTF-8)" "$current")
+    else
+        locale=$(echo "$choice" | awk '{print $1}')
+    fi
+    [[ -z "$locale" ]] && return 0
+
+    if sudo localectl set-locale LANG="$locale" 2>/dev/null; then
+        ok "System language set to '$locale' (relogin required)."
+    else
+        err "Could not set locale '$locale'."
+    fi
+    sleep 1.5
+}
+
+# ── Timezone ─────────────────────────────────────────────────
+_timezone_tui() {
+    local current
+    current=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "Unknown")
+
+    sf_banner "Timezone"
+    sf_note "Current timezone: $current · $(date '+%H:%M:%S %Z')"
+
+    local choice st
+    choice=$(sf_choose "Select a timezone" 13 \
+        "Europe/Berlin" \
+        "Europe/Vienna" \
+        "Europe/Zurich" \
+        "Europe/London" \
+        "Europe/Paris" \
+        "America/New_York" \
+        "America/Los_Angeles" \
+        "Asia/Tokyo" \
+        "Australia/Sydney" \
+        "🔍  Search all timezones…" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+    local tz
+    if [[ "$choice" == *Search* ]]; then
+        tz=$(timedatectl list-timezones 2>/dev/null | sf_filter "Timezone" "Type to search · Enter to select" 15)
+    else
+        tz="$choice"
+    fi
+    [[ -z "$tz" ]] && return 0
+
+    if sudo timedatectl set-timezone "$tz" 2>/dev/null; then
+        ok "Timezone set to '$tz'."
+    else
+        err "Invalid timezone: $tz"
+    fi
+    sleep 1.5
+}
+
+# ── Bluetooth ────────────────────────────────────────────────
+_bt_tui() {
+    while true; do
+        local state="off"
+        bluetoothctl show 2>/dev/null | grep -q "Powered: yes" && state="on"
+
+        local boot_state="off"
+        grep -iE '^\s*AutoEnable\s*=\s*true' /etc/bluetooth/main.conf &>/dev/null && boot_state="on"
+
+        sf_banner "Bluetooth"
+        sf_note "Adapter: $state · Autostart on boot: $boot_state"
+
+        local choice st
+        choice=$(sf_choose "Bluetooth" 10 \
+            "🔛  Turn on" \
+            "⏹️   Turn off" \
+            "🔁  Toggle" \
+            "🚀  Enable autostart on boot" \
+            "🛑  Disable autostart on boot" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+        case "$choice" in
+            *"Turn on"*)           _bt_on ;;
+            *"Turn off"*)          _bt_off ;;
+            *Toggle*)              _bt_toggle ;;
+            *"Enable autostart"*)  _bt_boot_on ;;
+            *"Disable autostart"*) _bt_boot_off ;;
+        esac
+        sleep 1.2
+    done
+}
+
+# ── User management ──────────────────────────────────────────
+_user_tui() {
+    sf_banner "User Management"
+    sf_note "Current user: $USER · Home: $HOME"
+
+    local choice st
+    choice=$(sf_choose "User management" 8 \
+        "🔑  Change password" \
+        "➕  Add user" \
+        "➖  Delete user" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
+
+    local name
+    case "$choice" in
+        *"Change password"*)
+            name=$(sf_ask "User to change the password for" "$USER")
+            [[ -z "$name" ]] && return 0
+            info "Changing password for: $name"
+            if [[ "$name" == "$USER" ]]; then
+                passwd
+            else
+                sudo passwd "$name"
+            fi
+            ;;
+        *"Add user"*)
+            name=$(sf_ask "New username")
+            [[ -z "$name" ]] && return 0
+            sf_confirm "Create user '$name'?" "Create" "Cancel" no || return 0
+            sudo adduser "$name"
+            ;;
+        *"Delete user"*)
+            name=$(sf_ask "Username to delete")
+            [[ -z "$name" ]] && return 0
+            sf_confirm "Delete user '$name' including home directory?" "Delete" "Cancel" no || return 0
+            sudo deluser --remove-home "$name"
+            ;;
+    esac
+    sf_pause
+}
+
+# ============================================================
 # snowfox bt — Bluetooth
 # ============================================================
 _bt_on() {
@@ -315,6 +588,20 @@ _bt_boot_off() {
     ok "Bluetooth will be OFF after next boot."
 }
 
+_bt_status() {
+    header "Bluetooth"
+    local state="off"
+    bluetoothctl show 2>/dev/null | grep -q "Powered: yes" && state="on"
+    bool_row "Current" "$([[ "$state" == "on" ]] && echo true || echo false)" "on" "off"
+
+    local boot_state="off"
+    grep -iE '^\s*AutoEnable\s*=\s*true' /etc/bluetooth/main.conf &>/dev/null && boot_state="on"
+    bool_row "On boot" "$([[ "$boot_state" == "on" ]] && echo true || echo false)" "on" "off"
+    echo ""
+    info "Commands: snowfox bt <on|off|toggle|boot-on|boot-off>"
+    echo ""
+}
+
 cmd_bluetooth() {
     case "$1" in
         on)       _bt_on ;;
@@ -322,22 +609,13 @@ cmd_bluetooth() {
         toggle)   _bt_toggle ;;
         boot-on)  _bt_boot_on ;;
         boot-off) _bt_boot_off ;;
-        status|"")
-            header "Bluetooth"
-            local state="off"
-            bluetoothctl show 2>/dev/null | grep -q "Powered: yes" && state="on"
-            bool_row "Current" "$([[ "$state" == "on" ]] && echo true || echo false)" "on" "off"
-
-            local boot_state="off"
-            grep -iE '^\s*AutoEnable\s*=\s*true' /etc/bluetooth/main.conf &>/dev/null && boot_state="on"
-            bool_row "On boot" "$([[ "$boot_state" == "on" ]] && echo true || echo false)" "on" "off"
-            echo ""
-            info "Commands: snowfox bt <on|off|toggle|boot-on|boot-off>"
-            echo ""
+        status)   _bt_status ;;
+        "")
+            if sf_can_tui; then _bt_tui; else _bt_status; fi
             ;;
         *)
             err "Usage: snowfox bt <on|off|toggle|boot-on|boot-off|status>"
-            exit 1
+            return 1
             ;;
     esac
 }
@@ -350,6 +628,8 @@ cmd_keyboard() {
         sudo localectl set-x11-keymap "$1" 2>/dev/null
         setxkbmap "$1" 2>/dev/null || true
         ok "Keyboard layout set to '$1'."
+    elif sf_can_tui; then
+        _keyboard_tui
     else
         header "Keyboard Layout"
         local current
@@ -368,6 +648,8 @@ cmd_language() {
     if [[ -n "$1" ]]; then
         sudo localectl set-locale LANG="$1" 2>/dev/null
         ok "System language set to '$1' (relogin required)."
+    elif sf_can_tui; then
+        _language_tui
     else
         header "System Language"
         local current
@@ -389,8 +671,10 @@ cmd_timezone() {
         else
             err "Invalid timezone: $1"
             info "  List available: timedatectl list-timezones"
-            exit 1
+            return 1
         fi
+    elif sf_can_tui; then
+        _timezone_tui
     else
         header "Timezone"
         local tz
@@ -414,38 +698,53 @@ cmd_user() {
         passwd)
             local target="${username:-$USER}"
             info "Changing password for: $target"
-            passwd "$target"
+            if [[ "$target" == "$USER" ]]; then
+                passwd
+            else
+                sudo passwd "$target"
+            fi
             ;;
         add)
             if [[ -z "$username" ]]; then
                 err "Usage: snowfox user add <username>"
-                exit 1
+                return 1
             fi
             sudo adduser "$username"
             ;;
         del)
             if [[ -z "$username" ]]; then
                 err "Usage: snowfox user del <username>"
-                exit 1
+                return 1
             fi
             sudo deluser --remove-home "$username"
             ;;
-        status|"")
-            header "User Management"
-            row "Current user" "$USER"
-            row "Home"         "$HOME"
-            echo ""
-            info "Commands:"
-            info "  snowfox user passwd [username]   — Change password"
-            info "  snowfox user add <username>      — Create new user"
-            info "  snowfox user del <username>      — Delete user"
-            echo ""
+        status)
+            _user_status
+            ;;
+        "")
+            if sf_can_tui; then
+                _user_tui
+            else
+                _user_status
+            fi
             ;;
         *)
             err "Usage: snowfox user <passwd|add|del|status>"
-            exit 1
+            return 1
             ;;
     esac
+}
+
+_user_status() {
+    header "User Management"
+    row "Current user" "$USER"
+    row "Home"         "$HOME"
+    echo ""
+    info "Commands:"
+    info "  snowfox user passwd [username]   — Change password"
+    info "  snowfox user add <username>      — Create new user"
+    info "  snowfox user del <username>      — Delete user"
+    echo ""
 }
 
 # ============================================================
@@ -460,7 +759,7 @@ cmd_defaults() {
         set)
             if [[ -z "$key" || -z "$value" ]]; then
                 err "Usage: snowfox def set <browser|terminal|editor|fm> <command>"
-                exit 1
+                return 1
             fi
             case "$key" in
                 browser)         set_setting "DEFAULT_BROWSER" "$value" ;;
@@ -469,24 +768,28 @@ cmd_defaults() {
                 fm|filemanager)  set_setting "DEFAULT_FILEMANAGER" "$value" ;;
                 *)
                     err "Unknown category: $key (allowed: browser, terminal, editor, fm)"
-                    exit 1
+                    return 1
                     ;;
             esac
             ok "Default $key set to '$value'."
             ;;
         status|"")
-            header "Default Applications"
-            row "Browser"      "$(get_setting DEFAULT_BROWSER zen-browser)"
-            row "Terminal"     "$(get_setting DEFAULT_TERMINAL kitty)"
-            row "Editor"       "$(get_setting DEFAULT_EDITOR geany)"
-            row "File manager" "$(get_setting DEFAULT_FILEMANAGER pcmanfm)"
-            echo ""
-            info "Change: snowfox def set <category> <command>"
-            echo ""
+            if [[ -z "$action" ]] && sf_can_tui; then
+                _defaults_tui
+            else
+                header "Default Applications"
+                row "Browser"      "$(get_setting DEFAULT_BROWSER zen-browser)"
+                row "Terminal"     "$(get_setting DEFAULT_TERMINAL kitty)"
+                row "Editor"       "$(get_setting DEFAULT_EDITOR geany)"
+                row "File manager" "$(get_setting DEFAULT_FILEMANAGER pcmanfm)"
+                echo ""
+                info "Change: snowfox def set <category> <command>"
+                echo ""
+            fi
             ;;
         *)
             err "Usage: snowfox def [set] <category> <command>"
-            exit 1
+            return 1
             ;;
     esac
 }

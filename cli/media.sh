@@ -54,15 +54,19 @@ _prepare_cookies() {
 cmd_fetch() {
     if ! command -v aria2c &>/dev/null; then
         err "aria2c not found. Install: sudo apt install aria2"
-        exit 1
+        return 1
     fi
 
-    if [[ -z "$1" ]]; then
-        err "Usage: snowfox fetch <URL>"
-        exit 1
+    local URL="${1:-}"
+    if [[ -z "$URL" ]] && sf_can_tui; then
+        URL=$(sf_ask_ph "Download URL (16 parallel connections)" "https://…")
+        [[ -z "$URL" ]] && return 0
+    fi
+    if [[ -z "$URL" ]]; then
+        err "Usage: snowfox fetch <URL> [output-dir]"
+        return 1
     fi
 
-    local URL="$1"
     local OUTDIR="${2:-$DOWNLOAD_DIR}"
     mkdir -p "$OUTDIR"
 
@@ -92,7 +96,7 @@ cmd_fetch() {
     else
         echo ""
         err "Download failed."
-        exit 1
+        return 1
     fi
 }
 
@@ -102,15 +106,18 @@ cmd_fetch() {
 cmd_download() {
     if ! command -v yt-dlp &>/dev/null; then
         err "yt-dlp not found. Install: sudo apt install yt-dlp"
-        exit 1
+        return 1
     fi
 
-    if [[ -z "$1" ]]; then
+    local URL="${1:-}"
+    if [[ -z "$URL" ]] && sf_can_tui; then
+        URL=$(sf_ask_ph "Video or audio URL" "https://…")
+        [[ -z "$URL" ]] && return 0
+    fi
+    if [[ -z "$URL" ]]; then
         err "Usage: snowfox dl <URL>"
-        exit 1
+        return 1
     fi
-
-    local URL="$1"
 
     _prepare_cookies
 
@@ -124,11 +131,28 @@ cmd_download() {
     fi
     echo ""
 
-    echo -e "  ${CYAN}1${RESET}) Video (best quality)"
-    echo -e "  ${CYAN}2${RESET}) Audio only (mp3)"
-    echo -e "  ${CYAN}3${RESET}) Audio only (opus, smaller)"
-    echo ""
-    read -rp "$(echo -e ${PURPLE}${BOLD}"Format [1-3]: "${RESET})" FORMAT
+    local FORMAT=""
+    if sf_can_tui; then
+        local pick st
+        pick=$(sf_choose "Format" 5 \
+            "🎬  Video — best quality" \
+            "🎵  Audio only — mp3" \
+            "🎧  Audio only — opus (smaller)" \
+            "↩   Cancel")
+        st=$?
+        [[ $st -ne 0 || -z "$pick" || "$pick" == *Cancel* ]] && return 0
+        case "$pick" in
+            *Video*) FORMAT="1" ;;
+            *mp3*)   FORMAT="2" ;;
+            *opus*)  FORMAT="3" ;;
+        esac
+    else
+        echo -e "  ${CYAN}1${RESET}) Video (best quality)"
+        echo -e "  ${CYAN}2${RESET}) Audio only (mp3)"
+        echo -e "  ${CYAN}3${RESET}) Audio only (opus, smaller)"
+        echo ""
+        read -rp "$(echo -e ${PURPLE}${BOLD}"Format [1-3]: "${RESET})" FORMAT
+    fi
 
     mkdir -p "$DOWNLOAD_DIR"
 
@@ -170,7 +194,7 @@ cmd_download() {
             ;;
         *)
             err "Invalid selection."
-            exit 1
+            return 1
             ;;
     esac
 
@@ -180,8 +204,17 @@ cmd_download() {
     else
         echo ""
         err "Download failed. Try: yt-dlp --update"
-        exit 1
+        return 1
     fi
+}
+
+# ── Search helper (uses globals: _STREAM_QUERY, COOKIE_OPT) ──
+_stream_search() {
+    yt-dlp --force-ipv4 \
+        --extractor-args "youtube:player_client=web,android" \
+        "${COOKIE_OPT[@]}" \
+        --print "%(title)s|%(id)s" \
+        --flat-playlist "ytsearch5:${_STREAM_QUERY}" 2>/dev/null
 }
 
 # ============================================================
@@ -190,12 +223,12 @@ cmd_download() {
 cmd_stream() {
     if ! command -v mpv &>/dev/null; then
         err "mpv not found. Install: sudo apt install mpv"
-        exit 1
+        return 1
     fi
 
     if ! command -v yt-dlp &>/dev/null; then
         err "yt-dlp not found. Install: sudo apt install yt-dlp"
-        exit 1
+        return 1
     fi
 
     local AUDIO_ONLY=false
@@ -205,9 +238,26 @@ cmd_stream() {
     fi
 
     local QUERY="$*"
+
+    # ── Gum TUI: playback mode + search prompt ───────────────
+    if [[ -z "$QUERY" ]] && sf_can_tui; then
+        sf_banner "Stream"
+        local mode_pick st
+        mode_pick=$(sf_choose "Playback mode" 5 \
+            "🎬  Video (default)" \
+            "🎵  Audio only" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$mode_pick" || "$mode_pick" == *Back* ]] && return 0
+        [[ "$mode_pick" == *"Audio only"* ]] && AUDIO_ONLY=true
+
+        QUERY=$(sf_ask_ph "Search video or music" "Song, artist, title — or a direct URL")
+        [[ -z "$QUERY" ]] && return 0
+    fi
+
     if [[ -z "$QUERY" ]]; then
         read -rp "$(echo -e ${PURPLE}${BOLD}"Search (video/music): "${RESET})" QUERY
-        [[ -z "$QUERY" ]] && exit 0
+        [[ -z "$QUERY" ]] && return 0
     fi
 
     _prepare_cookies
@@ -216,36 +266,68 @@ cmd_stream() {
     if [[ "$QUERY" =~ ^http ]]; then
         URL="$QUERY"
     else
-        header "Stream"
-        fox "Searching YouTube: ${BOLD}$QUERY${RESET}"
+        if ! sf_can_tui; then
+            header "Stream"
+            fox "Searching YouTube: ${BOLD}$QUERY${RESET}"
+        fi
 
         local -a RESULTS
-        mapfile -t RESULTS < <(yt-dlp --force-ipv4 \
-            --extractor-args "youtube:player_client=web,android" \
-            "${COOKIE_OPT[@]}" \
-            --print "%(title)s|%(id)s" \
-            --flat-playlist "ytsearch5:$QUERY" 2>/dev/null)
+        local tmp
+        tmp=$(mktemp)
+        _STREAM_QUERY="$QUERY"
+        if sf_can_tui; then
+            sf_spin_do "Searching YouTube for \"$QUERY\"…" _stream_search "$tmp"
+        else
+            _stream_search > "$tmp"
+        fi
+        mapfile -t RESULTS < "$tmp"
+        rm -f "$tmp"
 
         if [[ ${#RESULTS[@]} -eq 0 ]]; then
             err "No results found."
-            exit 1
+            return 1
         fi
 
-        divider
-        for i in "${!RESULTS[@]}"; do
-            local title="${RESULTS[$i]%|*}"
-            echo -e "  ${CYAN}$((i+1))${RESET}) $title"
-        done
-        divider
-        echo ""
+        local ID="" TITLE=""
+        if sf_can_tui; then
+            local -a titles=()
+            local r
+            for r in "${RESULTS[@]}"; do
+                titles+=("${r%|*}")
+            done
 
-        read -rp "$(echo -e ${PURPLE}${BOLD}"Select [1-${#RESULTS[@]}]: "${RESET})" CHOICE
-        [[ -z "$CHOICE" || ! "$CHOICE" =~ ^[0-9]+$ ]] && exit 0
-        [[ "$CHOICE" -lt 1 || "$CHOICE" -gt "${#RESULTS[@]}" ]] && exit 0
+            local selected st
+            selected=$(printf '%s\n' "${titles[@]}" | sf_filter \
+                "Results for \"$QUERY\"" "Type to filter — Enter to play" 12)
+            st=$?
+            [[ $st -ne 0 || -z "$selected" ]] && return 0
 
-        local ID="${RESULTS[$((CHOICE-1))]##*|}"
+            for r in "${RESULTS[@]}"; do
+                if [[ "${r%|*}" == "$selected" ]]; then
+                    ID="${r##*|}"
+                    TITLE="$selected"
+                    break
+                fi
+            done
+        else
+            divider
+            local i
+            for i in "${!RESULTS[@]}"; do
+                echo -e "  ${CYAN}$((i+1))${RESET}) ${RESULTS[$i]%|*}"
+            done
+            divider
+            echo ""
+
+            local CHOICE
+            read -rp "$(echo -e ${PURPLE}${BOLD}"Select [1-${#RESULTS[@]}]: "${RESET})" CHOICE
+            [[ -z "$CHOICE" || ! "$CHOICE" =~ ^[0-9]+$ ]] && return 0
+            [[ "$CHOICE" -lt 1 || "$CHOICE" -gt "${#RESULTS[@]}" ]] && return 0
+
+            ID="${RESULTS[$((CHOICE-1))]##*|}"
+            TITLE="${RESULTS[$((CHOICE-1))]%|*}"
+        fi
+
         if [[ ! "$ID" =~ ^[A-Za-z0-9_-]{11}$ ]]; then
-            local TITLE="${RESULTS[$((CHOICE-1))]%|*}"
             URL="ytsearch1:$TITLE"
         else
             URL="https://www.youtube.com/watch?v=$ID"

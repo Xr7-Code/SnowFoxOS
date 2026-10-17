@@ -37,20 +37,24 @@ SnowFoxOS/
 │
 ├── cli/                              # snowfox CLI modules (/usr/local/lib/snowfox/cli/)
 │   ├── utils.sh                      # Terminal colors, headers, progress bar & spinner
+│   ├── gum.sh                        # Shared Gum TUI library: theme, widgets, TUI detection
 │   ├── help.sh                       # Command overview & help (snowfox h)
 │   ├── status.sh                     # System status & battery diagnostics (snowfox st / bat)
 │   ├── system.sh                     # System update, power profiles & reset (snowfox up/prof/rst)
 │   ├── hardware.sh                   # GPU info, kill switches & airmode (snowfox gpu/kill/air)
 │   ├── security.sh                   # Network audit & live connections (snowfox audit)
 │   ├── media.sh                      # Video/audio stream & high-speed fetch (snowfox stream/dl/fetch)
-│   ├── desktop.sh                    # Autostart, window layout & WebApps (snowfox auto/lay/web)
+│   ├── music.sh                      # Gum TUI: music search, playlists, sources (snowfox music)
+│   ├── desktop.sh                    # Autostart, layout, WebApps, wallpaper & display (snowfox auto/lay/web/wall/disp)
+│   ├── network.sh                    # Gum TUI: NetworkManager frontend (snowfox net)
 │   ├── stash.sh                      # Integrated package manager / Software Stash (snowfox stash)
-│   ├── settings.sh                   # System settings in terminal & Rofi GUI (snowfox set)
+│   ├── settings.sh                   # System settings in terminal, Gum TUI & Rofi GUI (snowfox set)
 │   ├── doctor.sh                     # Deep system diagnostics & integrity check (snowfox doc)
 │   ├── mesh.sh                       # Wrapper for the P2P Mesh module (snowfox mesh)
 │   ├── ai.sh                         # Local offline AI with Ollama & Chat UI (snowfox ai)
 │   ├── snap.sh                       # Configuration snapshots & restore (snowfox snap)
-│   └── tor.sh                        # Transparent Tor proxying & fail-closed security (snowfox tor)
+│   ├── tor.sh                        # Transparent Tor proxying & fail-closed security (snowfox tor)
+│   └── tui.sh                        # Main Gum control center (snowfox / snowfox tui)
 │
 ├── configs/                          # Configuration files & helper scripts (~/.config/)
 │   ├── snowfox-wallpaper.sh          # Rofi-based wallpaper selector
@@ -107,8 +111,11 @@ SnowFoxOS/
 - **Purpose:** Primary Command Line Interface (CLI) to control the entire system.
 - **Functionality:**
   - Checks for the existence of CLI modules under `/usr/local/lib/snowfox/cli/`.
-  - Sources all submodules (`status.sh`, `system.sh`, `hardware.sh`, `media.sh`, `security.sh`, `desktop.sh`, `stash.sh`, `settings.sh`, `doctor.sh`, `mesh.sh`, `ai.sh`, `snap.sh`, `tor.sh`, `help.sh`).
+  - Sources all submodules (`utils.sh`, `gum.sh`, `status.sh`, `system.sh`, `hardware.sh`, `media.sh`, `security.sh`, `desktop.sh`, `network.sh`, `stash.sh`, `settings.sh`, `doctor.sh`, `mesh.sh`, `ai.sh`, `snap.sh`, `tor.sh`, `help.sh`, `tui.sh`).
+  - Detects once whether a Gum TUI is possible (`gum` installed + interactive terminal) and caches the result (`SNOWFOX_TUI=0/1` overrides it).
   - Acts as a dispatcher for all `snowfox <command>` calls with short aliases (e.g., `st`, `up`, `prof`, `doc`, `air`, `dl`, `wall`).
+  - Plain `snowfox` (or `snowfox tui`) opens the Gum **control center**; when gum/TTY is unavailable it falls back to the classic help text.
+  - **TUI convention:** every command *without arguments* opens its own Gum TUI in an interactive terminal; supplying arguments keeps the classic, scriptable behaviour (`SNOWFOX_TUI=0` forces plain output).
 
 ### 3. `snowfox-greeting.sh`
 - **Purpose:** Interactive greeting banner shown when opening new terminal sessions.
@@ -171,6 +178,7 @@ Scripts in the `lib/` directory execute individual setup phases. They run within
 - Prompts for file manager (`PCManFM`), code editor (`Geany` with selected plugins like Git, Ctags, ProjectOrganizer), and screenshot tool (`Flameshot`).
 - Allows optional installation of `GIMP`, `VSCodium`, and `OnlyOffice`.
 - Installs `yt-dlp` along with `Node.js` (JavaScript runtime for signature decryption).
+- Installs `gum` (Charm TUI toolkit for `snowfox music`) — via apt if available, otherwise as an arch-aware prebuilt binary from GitHub releases.
 - Clones `SnowFox Console Launcher` for Steam and retro gaming.
 
 ### `lib/browser_selection.sh` (Step 6)
@@ -229,8 +237,20 @@ CLI modules reside at `/usr/local/lib/snowfox/cli/` after installation and are m
 ### `cli/utils.sh`
 - Terminal output formatting utilities: ANSI color definitions, box headers (`header()`), dividers (`divider()`), status rows (`row()`, `bool_row()`), progress bars (`bar()`), and loading spinners (`spin_start()`).
 
+### `cli/gum.sh` — shared Gum TUI library
+- Central theme (SnowFox purple palette matching Polybar/Kitty) and reusable `sf_*` widgets used by every TUI module:
+  - Detection: `sf_tui_detect` / `sf_can_tui` / `sf_have_gum` (cached; `SNOWFOX_TUI=0/1` override).
+  - Decoration (stderr only, so `$( )` captures stay clean): `sf_banner`, `sf_note`, `sf_keyhint`.
+  - Input widgets (result on stdout): `sf_choose`, `sf_input`, `sf_secret`, `sf_filter`, `sf_confirm`, `sf_spin`, `sf_spin_do`, `sf_pager`, `sf_page`, `sf_pause`.
+  - TUI-aware prompts that fall back to plain `read` without gum: `sf_yesno`, `sf_ask`, `sf_ask_secret`.
+  - `sf_gum_missing` prints shared install instructions (Charm APT repo, prebuilt binary, `go install`).
+
+### `cli/tui.sh` — Gum control center (`snowfox` / `snowfox tui`)
+- Main menu that launches every other command (status, battery, update, profiles, doctor, GPU, kill switches, air mode, audit, Tor, media, network, wallpaper, display, autostart, layout, WebApps, stash, settings, snapshots, AI, help).
+- Plain `snowfox` opens it automatically in an interactive terminal; without gum/TTY it falls back to the help overview.
+
 ### `cli/help.sh` (`snowfox h` / `snowfox help`)
-- Displays structured, colorized help for all available CLI commands.
+- Displays structured, colorized help for all available CLI commands; inside the TUI the overview opens in the Gum pager.
 
 ### `cli/status.sh` (`snowfox st` / `snowfox bat`)
 - `cmd_status`: Provides real-time information on uptime, RAM usage, disk space, CPU, GPU, IP address, airmode, microphone/camera status, and current mode.
@@ -262,34 +282,51 @@ CLI modules reside at `/usr/local/lib/snowfox/cli/` after installation and are m
 - `cmd_download`: Downloads videos or audio (MP3/Opus) via `yt-dlp`.
 - `cmd_fetch`: Uses `aria2` for high-speed downloads across 16 parallel connections.
 
-### `cli/desktop.sh` (`snowfox auto` / `snowfox lay` / `snowfox web`)
+### `cli/music.sh` (`snowfox music`)
+- Interactive **Gum-based TUI** for music streaming with the SnowFox color theme (rounded banners, themed pickers, spinners, pager).
+- `Browse & Search`: Searches the active source (YouTube Music, Spotify, SoundCloud or YouTube via `yt-dlp`) and plays tracks directly in `mpv`, or saves them to a playlist.
+- `Playlists`: Creates, views (pager), plays and deletes JSON playlists stored in `~/.config/snowfox/playlists.json`.
+- `Streaming Source`: Changes the search backend (persisted in `~/.config/snowfox/music_source.txt`).
+- `Stream direct URL`: Plays any direct media link through `mpv`.
+- **Dependency check:** if `gum` is not installed, the command prints step-by-step installation instructions (Charm APT repository, prebuilt binary, or `go install`) and exits cleanly.
+
+### `cli/desktop.sh` (`snowfox auto` / `snowfox lay` / `snowfox web` / `snowfox wall` / `snowfox disp`)
 - `cmd_start`: Manages autostart entries in i3 and `~/.config/autostart/`.
 - `cmd_layout`: Dynamically toggles between tiling window management and classic floating window mode.
 - `cmd_webapp`: Creates isolated WebApps using Zen Browser (fetches favicons, hides browser UI elements via `userChrome.css`, and generates `.desktop` files for Rofi).
+- `cmd_wallpaper`: Gum TUI wallpaper picker (filter list, applies via `feh`); `snowfox wall gui` starts the classic Rofi selector.
+- `cmd_display`: Gum TUI display setup (mirror, extend, primary only, arrangement) for X11/xrandr; `snowfox disp gui` starts the classic Rofi manager.
+
+### `cli/network.sh` (`snowfox net`)
+- Gum TUI frontend for NetworkManager (`nmcli`): Wi-Fi scan/connect/disconnect, saved networks (forget), connection details, and an optional Rofi GUI (`snowfox net gui`).
 
 ### `cli/stash.sh` (`snowfox stash`)
-- Integrated software catalog and package manager frontend for `apt`.
+- Integrated software catalog and package manager frontend for `apt` with a full Gum TUI (categories, apt search, installed apps, package actions, upgrades).
 - Offers curated categories (`internet`, `office`, `ide`, `media`, `gaming`, `ai`, `security`, `system`, etc.), search features, size previews, and protection against accidental removal of core system components.
 
 ### `cli/settings.sh` (`snowfox set` / `snowfox bt` / `snowfox kb` / `snowfox lang` / `snowfox tz` / `snowfox user` / `snowfox def`)
-- Terminal and Rofi GUI menus (`snowfox set gui`) for managing system settings (defaults, keyboard layout, language, timezone, Bluetooth autostart, user accounts).
+- Gum TUI settings center (`snowfox set`) for default applications, keyboard layout, system language, timezone (incl. full timezone search), Bluetooth, and user management — each accessible directly via its own command (`snowfox bt`, `snowfox kb`, …).
+- Classic terminal overview (`snowfox set overview`) and Rofi GUI (`snowfox set gui`) remain available.
 
 ### `cli/doctor.sh` (`snowfox doc`)
 - Comprehensive diagnostic tool: Inspects RAM, swap, top RAM consumers, missing kernel firmware, GPU drivers, i3 syntax, running audio services, systemd failures, disk space, and security components.
+- Inside the TUI the report runs under a spinner and opens in the Gum pager with an OK/WARN/FAIL summary.
 
 ### `cli/mesh.sh` (`snowfox mesh`)
 - Wrapper script forwarding commands to the standalone P2P Mesh engine (`~/.config/snowfox-mesh.sh`).
 
 ### `cli/ai.sh` (`snowfox ai`)
-- Interactive chat UI for local offline AI (Ollama).
+- Interactive chat UI for local offline AI (Ollama) with a Gum TUI menu (start chat with model picker, installed models, pull, history, clear).
 - Features pre-configured system prompts with deep knowledge of SnowFoxOS, model management (`pull`, `models`), and local chat history (`history`).
 
 ### `cli/snap.sh` (`snowfox snap`)
 - Creates, compares (`diff`), and restores backups (`snapshots`) of personal desktop configurations (`i3`, `polybar`, `rofi`, `dunst`, `kitty`, `picom`).
+- Gum TUI: create snapshots, browse/filter existing ones, and restore, diff or delete them; restores always auto-save a `pre-restore` backup first.
 
 ### `cli/tor.sh` (`snowfox tor`)
 - **Transparent Tor Proxying:** Routes all TCP traffic and DNS queries through Tor (`iptables` redirect to TransPort `9040` & DNSPort `5353`).
 - **Fail-Closed Security:** Blocks all network traffic if Tor service stops. Disables IPv6 to prevent leaks.
+- Gum TUI menu (enable, disable, status, restart) that runs the individual steps under a spinner and shows the full report in the pager.
 
 ---
 
@@ -343,7 +380,7 @@ CLI modules reside at `/usr/local/lib/snowfox/cli/` after installation and are m
 ## ⌨️ Shell Completion & Media (`completions/`)
 
 ### `completions/snowfox-completion.bash`
-- Provides bash auto-completion for `snowfox` CLI (completes main commands, subcommands, profiles, package names via `apt-cache`, and snapshot IDs).
+- Provides bash auto-completion for `snowfox` CLI (completes main commands incl. `tui`/`menu`, subcommands like `tor restart` or `update packages`, profiles, package names via `apt-cache`, and snapshot IDs).
 
 ---
 

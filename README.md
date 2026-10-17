@@ -239,10 +239,13 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 
 `snowfox` is the central control. All functions are accessible via a single command with short flat aliases. `snowfox h` shows the overview, `snowfox <command> --help` shows details for a command.
 
+**Gum TUI:** plain `snowfox` opens the interactive control center (`snowfox tui` always does). Any command **without arguments** — e.g. `snowfox stash`, `snowfox snap`, `snowfox set` — opens its own Gum menu in an interactive terminal. Adding arguments keeps the classic, scriptable output (`SNOWFOX_TUI=0` disables the TUI entirely).
+
 ### System & Status
 
 | Command | Description |
 |---|---|
+| `snowfox` / `snowfox tui` | Gum control center (interactive terminal) |
 | `snowfox h` | Help: overview of all commands |
 | `snowfox st` | System overview: RAM, disk, uptime, GPU mode, mic/camera status, network |
 | `snowfox bat` | Battery, consumption & health |
@@ -259,7 +262,7 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 | `snowfox air [on\|off\|status]` | Disable all wireless interfaces |
 | `snowfox audit` | Active network connections with process and destination IP |
 | `snowfox audit live` | Live mode: refreshes active connections every 2 seconds |
-| `snowfox tor [on\|off\|status]` | Tor mode: transparent proxy via iptables, all TCP and DNS through Tor, fail-closed, IPv6 off, MAC randomization |
+| `snowfox tor [on\|off\|status\|restart]` | Tor mode: transparent proxy via iptables, all TCP and DNS through Tor, fail-closed, IPv6 off, MAC randomization |
 
 ### Media
 
@@ -273,12 +276,13 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 
 | Command | Description |
 |---|---|
-| `snowfox stash` | Software stash: overview of categories |
+| `snowfox stash` | Software stash (interactive TUI): categories, search, installed apps, upgrade |
 | `snowfox stash <category>` | List software in a category |
 | `snowfox stash find <term>` | Search for software |
 | `snowfox stash info <name>` | Show details about an entry |
 | `snowfox stash install <name>` | Install software |
 | `snowfox stash [list\|remove]` | List installed / remove entries (Rofi apps) |
+| `snowfox stash upgrade` | Upgrade all installed packages |
 
 ### Desktop
 
@@ -296,21 +300,32 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 
 | Command | Description |
 |---|---|
-| `snowfox set` | Settings overview (terminal) |
+| `snowfox set` | Settings center (interactive TUI) |
+| `snowfox set overview` | Settings overview (plain terminal) |
 | `snowfox set gui` | Settings overview (Rofi menu) |
-| `snowfox bt [on\|off\|toggle]` | Bluetooth control |
+| `snowfox bt [on\|off\|toggle]` | Bluetooth control (TUI without arguments) |
 | `snowfox kb [layout]` | Keyboard layout (e.g. `de`, `us`) |
 | `snowfox lang [locale]` | System language (e.g. `en_US.UTF-8`) |
 | `snowfox tz [zone]` | Timezone (e.g. `Europe/Berlin`) |
 | `snowfox user [passwd\|add\|del]` | User management |
 | `snowfox def [set] <key> <val>` | Default applications |
 
+### Snapshots
+
+| Command | Description |
+|---|---|
+| `snowfox snap` | Config snapshots (interactive TUI): create, browse, restore, diff, delete |
+| `snowfox snap save [name]` | Save current config (i3, polybar, kitty, …) |
+| `snowfox snap restore <id>` | Restore a snapshot (auto-backup first) |
+| `snowfox snap diff <id>` | Compare snapshot to current config |
+| `snowfox snap delete <id>` | Delete a snapshot |
+
 ### Node & AI
 
 | Command | Description |
 |---|---|
 | `snowfox node [d\|s\|c]` | System mode (long forms `desktop`, `server`, `console` also work) |
-| `snowfox ai` | Offline AI (Ollama) |
+| `snowfox ai` | Offline AI (Ollama) — TUI menu: chat, models, pull, history |
 
 - `d` / `desktop` — standard desktop mode
 - `s` / `server` — server mode, minimal footprint
