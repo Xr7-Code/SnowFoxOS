@@ -1,7 +1,10 @@
 #!/bin/bash
 # ============================================================
-#  SnowFoxOS — CLI Module: Music & Streaming TUI App
+#  SnowFoxOS — CLI Module: Music & Streaming (Gum TUI)
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+#
+#  Requires: gum (TUI), mpv (playback), yt-dlp (search/stream)
+#  If gum is missing, install instructions are shown.
 # ============================================================
 
 MUSIC_CONFIG_DIR="$HOME/.config/snowfox"
@@ -11,7 +14,16 @@ PREF_FILE="$MUSIC_CONFIG_DIR/music_source.txt"
 # Ensure config dir exists
 mkdir -p "$MUSIC_CONFIG_DIR"
 
-# Get current source (default: ytmusic)
+# ── SnowFox theme for Gum (matches Polybar / Kitty palette) ──
+GUM_PURPLE="#9d6fe8"
+GUM_PURPLE_LT="#b899ff"
+GUM_RED="#e87a7a"
+GUM_DIM="#6e6a8a"
+GUM_FG="#e0d9f5"
+
+# ============================================================
+#  Source preference
+# ============================================================
 _get_source() {
     if [[ -f "$PREF_FILE" ]]; then
         cat "$PREF_FILE"
@@ -24,427 +36,646 @@ _set_source() {
     echo "$1" > "$PREF_FILE"
 }
 
-# Python helper for JSON playlists
-_json_py() {
-    python3 -c "$1" 2>/dev/null
+_music_src_display() {
+    case "$(_get_source)" in
+        ytmusic)    echo "YouTube Music" ;;
+        spotify)    echo "Spotify (via yt-dlp)" ;;
+        soundcloud) echo "SoundCloud" ;;
+        youtube)    echo "YouTube" ;;
+        *)          echo "YouTube Music" ;;
+    esac
 }
 
+_music_src_prefix() {
+    case "$(_get_source)" in
+        ytmusic)    echo "ytsearchmusic" ;;
+        spotify)    echo "spsearch" ;;
+        soundcloud) echo "scsearch" ;;
+        *)          echo "ytsearch" ;;
+    esac
+}
+
+# ============================================================
+#  Gum widgets (SnowFox themed)
+# ============================================================
+_music_banner() {
+    # _music_banner [subtitle]
+    # Draws to stderr — stdout stays reserved for widget results.
+    local title="🦊  SnowFox Music"
+    [[ -n "${1:-}" ]] && title="$title  ·  $1"
+    clear >&2
+    gum style \
+        --border rounded \
+        --border-foreground "$GUM_PURPLE" \
+        --foreground "$GUM_PURPLE_LT" \
+        --bold \
+        --padding "0 3" \
+        --margin "1 0" \
+        "$title" 1>&2
+}
+
+_music_choose() {
+    # _music_choose <header> <height> <item...>
+    local header="$1" height="$2"
+    shift 2
+    gum choose \
+        --header "$header" \
+        --height "$height" \
+        --cursor "❯ " \
+        --cursor.foreground "$GUM_PURPLE_LT" \
+        --header.foreground "$GUM_PURPLE" \
+        --selected.foreground "$GUM_PURPLE_LT" \
+        "$@"
+}
+
+_music_input() {
+    # _music_input <header> <placeholder>
+    gum input \
+        --header "$1" \
+        --placeholder "$2" \
+        --prompt "❯ " \
+        --width 64 \
+        --prompt.foreground "$GUM_PURPLE_LT" \
+        --cursor.foreground "$GUM_PURPLE_LT" \
+        --header.foreground "$GUM_PURPLE" \
+        --placeholder.foreground "$GUM_DIM"
+}
+
+_music_spin() {
+    # _music_spin <title> <command...>
+    local title="$1"
+    shift
+    gum spin \
+        --spinner dot \
+        --title "$title" \
+        --spinner.foreground "$GUM_PURPLE_LT" \
+        --title.foreground "$GUM_FG" \
+        -- "$@"
+}
+
+_music_filter() {
+    # _music_filter <header> <placeholder> <height>   (list on stdin)
+    gum filter \
+        --header "$1" \
+        --placeholder "$2" \
+        --height "$3" \
+        --indicator "❯ " \
+        --indicator.foreground "$GUM_PURPLE_LT" \
+        --header.foreground "$GUM_PURPLE" \
+        --selected-indicator.foreground "$GUM_PURPLE_LT" \
+        --unselected-prefix.foreground "$GUM_DIM"
+}
+
+# ============================================================
+#  Playlist storage (JSON via python3)
+# ============================================================
 _init_playlists() {
     if [[ ! -f "$PLAYLIST_FILE" ]]; then
         echo "{}" > "$PLAYLIST_FILE"
     fi
 }
 
-cmd_music() {
-    if ! command -v mpv &>/dev/null; then
-        err "mpv not found. Install: sudo apt install mpv"
-        exit 1
-    fi
-    if ! command -v yt-dlp &>/dev/null; then
-        err "yt-dlp not found. Install: sudo apt install yt-dlp"
-        exit 1
-    fi
-
-    _init_playlists
-
-    local LAST_TRACK_TITLE=""
-    local LAST_TRACK_URL=""
-    local LAST_TRACK_SOURCE=""
-
-    while true; do
-        clear
-        header "SnowFox Music & Stream"
-        
-        local current_src="$(_get_source)"
-        local src_display="YouTube Music"
-        case "$current_src" in
-            ytmusic) src_display="YouTube Music (ytsearchmusic:)" ;;
-            spotify) src_display="Spotify (spsearch:)" ;;
-            soundcloud) src_display="SoundCloud (scsearch:)" ;;
-            youtube) src_display="YouTube (ytsearch:)" ;;
-        esac
-
-        row "Active Source" "$src_display" "$GREEN"
-        row "Playlists" "$(python3 -c 'import json; print(len(json.load(open("'"$PLAYLIST_FILE"'"))))' 2>/dev/null || echo 0) stored" "$CYAN"
-        divider
-        echo ""
-        echo -e "  ${CYAN}1${RESET}) 🎵 Browse Recommendations & Search"
-        echo -e "  ${CYAN}2${RESET}) 📂 Manage & Play Playlists"
-        echo -e "  ${CYAN}3${RESET}) ⚙️  Change Streaming Source"
-        echo -e "  ${CYAN}4${RESET}) 🔗 Stream Direct URL"
-        echo -e "  ${CYAN}5${RESET}) 🚪 Exit"
-        echo ""
-        divider
-        read -rp "$(echo -e ${PURPLE}${BOLD}"Select option [1-5]: "${RESET})" CHOICE
-
-        case "$CHOICE" in
-            1)
-                _music_search_and_play
-                ;;
-            2)
-                _music_playlists_menu
-                ;;
-            3)
-                _music_change_source_menu
-                ;;
-            4)
-                read -rp "$(echo -e ${PURPLE}${BOLD}"Enter Stream URL: "${RESET})" direct_url
-                if [[ -n "$direct_url" ]]; then
-                    fox "Streaming URL..."
-                    mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" "$direct_url"
-                fi
-                ;;
-            5|q|quit)
-                echo ""
-                ok "Exiting SnowFox Music."
-                exit 0
-                ;;
-            *)
-                warn "Invalid selection."
-                sleep 1
-                ;;
-        esac
-    done
+_pl_list() {
+    # name<TAB>count — one line per playlist
+    python3 - "$PLAYLIST_FILE" <<'PYEOF'
+import sys, json
+try:
+    with open(sys.argv[1], "r") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        data = {}
+except Exception:
+    data = {}
+for name, tracks in data.items():
+    if isinstance(tracks, list):
+        print(f"{name}\t{len(tracks)}")
+PYEOF
 }
 
-_music_change_source_menu() {
-    clear
-    header "Select Streaming Source"
-    echo -e "  ${CYAN}1${RESET}) YouTube Music (Recommended for music)"
-    echo -e "  ${CYAN}2${RESET}) Spotify (Track search via yt-dlp)"
-    echo -e "  ${CYAN}3${RESET}) SoundCloud (Independent artists & mixes)"
-    echo -e "  ${CYAN}4${RESET}) Standard YouTube"
-    echo -e "  ${CYAN}5${RESET}) Back"
-    echo ""
-    read -rp "$(echo -e ${PURPLE}${BOLD}"Choice [1-5]: "${RESET})" src_choice
-    case "$src_choice" in
-        1) _set_source "ytmusic"; ok "Source set to YouTube Music";;
-        2) _set_source "spotify"; ok "Source set to Spotify";;
-        3) _set_source "soundcloud"; ok "Source set to SoundCloud";;
-        4) _set_source "youtube"; ok "Source set to YouTube";;
-        *) return;;
-    esac
-    sleep 1
+_pl_count() {
+    _pl_list | wc -l | tr -d ' '
 }
 
-_music_search_and_play() {
-    clear
-    local src="$(_get_source)"
-    local prefix="ytsearchmusic"
-    local source_name="YouTube Music"
-    case "$src" in
-        ytmusic) prefix="ytsearchmusic"; source_name="YouTube Music";;
-        spotify) prefix="spsearch"; source_name="Spotify";;
-        soundcloud) prefix="scsearch"; source_name="SoundCloud";;
-        youtube) prefix="ytsearch"; source_name="YouTube";;
+_pl_track_count() {
+    python3 - "$PLAYLIST_FILE" "$1" <<'PYEOF'
+import sys, json
+try:
+    with open(sys.argv[1], "r") as f:
+        data = json.load(f)
+    tracks = data.get(sys.argv[2], [])
+    print(len(tracks) if isinstance(tracks, list) else 0)
+except Exception:
+    print(0)
+PYEOF
+}
+
+_pl_create() {
+    python3 - "$PLAYLIST_FILE" "$1" <<'PYEOF'
+import sys, json
+path, name = sys.argv[1], sys.argv[2]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        data = {}
+except Exception:
+    data = {}
+if name in data:
+    sys.exit(1)
+data[name] = []
+with open(path, "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+PYEOF
+}
+
+_pl_delete() {
+    python3 - "$PLAYLIST_FILE" "$1" <<'PYEOF'
+import sys, json
+path, name = sys.argv[1], sys.argv[2]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(1)
+if not isinstance(data, dict) or name not in data:
+    sys.exit(1)
+del data[name]
+with open(path, "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+PYEOF
+}
+
+_pl_add() {
+    python3 - "$PLAYLIST_FILE" "$1" "$2" "$3" "$4" <<'PYEOF'
+import sys, json
+path, name, title, url, src = sys.argv[1:6]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        data = {}
+except Exception:
+    data = {}
+data.setdefault(name, [])
+data[name].append({"title": title, "url": url, "source": src})
+with open(path, "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+PYEOF
+}
+
+_pl_dump() {
+    # Pretty track list for the pager
+    python3 - "$PLAYLIST_FILE" "$1" <<'PYEOF'
+import sys, json
+try:
+    with open(sys.argv[1], "r") as f:
+        data = json.load(f)
+    tracks = data.get(sys.argv[2], [])
+except Exception:
+    tracks = []
+print(f"{sys.argv[2]} — {len(tracks)} tracks")
+print("─" * 52)
+print()
+if not tracks:
+    print("  (empty)")
+for i, t in enumerate(tracks, 1):
+    print(f"  {i:>3}.  {t.get('title', 'Unknown')}")
+    print(f"        {t.get('source', 'Web')} · {t.get('url', '')}")
+PYEOF
+}
+
+_pl_urls() {
+    # Write all track URLs to $2, print the number of queued tracks
+    python3 - "$PLAYLIST_FILE" "$1" "$2" <<'PYEOF'
+import sys, json
+path, name, out = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    tracks = data.get(name, [])
+except Exception:
+    tracks = []
+count = 0
+with open(out, "w") as f:
+    for t in tracks:
+        url = t.get("url", "")
+        if url:
+            f.write(url + "\n")
+            count += 1
+print(count)
+PYEOF
+}
+
+# ============================================================
+#  Missing dependency: gum
+# ============================================================
+_music_gum_missing() {
+    local arch
+    case "$(uname -m)" in
+        x86_64|amd64)  arch="x86_64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        armv7l)        arch="armv7" ;;
+        armv6l)        arch="armv6" ;;
+        i386|i686)     arch="i386" ;;
+        *)             arch="x86_64" ;;
     esac
 
-    header "Browse / Search ($source_name)"
-    echo -e "  ${DGRAY}Tip: Enter a song title, artist, or genre (or leave empty for top recommendations)${RESET}"
+    local bin_cmd='    V=$(curl -fsSL https://api.github.com/repos/charmbracelet/gum/releases/latest | python3 -c "import sys,json;print(json.load(sys.stdin)[\"tag_name\"].lstrip(\"v\"))")
+    curl -fsSL "https://github.com/charmbracelet/gum/releases/download/v${V}/gum_${V}_Linux_ARCH.tar.gz" | sudo tar -xz -C /usr/local/bin --strip-components=1 --wildcards "gum_*/gum"'
+    bin_cmd="${bin_cmd//ARCH/$arch}"
+
     echo ""
-    read -rp "$(echo -e ${PURPLE}${BOLD}"Search query: "${RESET})" query
+    err "\"gum\" is not installed — it is required for the snowfox music TUI."
+    echo ""
+    echo -e "  ${BOLD}Install gum once, then run ${CYAN}snowfox music${RESET}${BOLD} again:${RESET}"
+    divider
+    echo ""
+    echo -e "  ${LPURPLE}${BOLD}Option 1 — Charm APT repository ${DGRAY}(recommended on SnowFoxOS / Debian)${RESET}"
+    echo -e "${DGRAY}"
+    cat <<'EOF'
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+    sudo apt update && sudo apt install gum
+EOF
+    echo -e "${RESET}"
+    echo -e "  ${LPURPLE}${BOLD}Option 2 — Prebuilt binary ${DGRAY}(no repository needed)${RESET}"
+    echo -e "${DGRAY}"
+    printf '%s\n' "$bin_cmd"
+    echo -e "${RESET}"
+    echo -e "  ${LPURPLE}${BOLD}Option 3 — Go ${DGRAY}(>= 1.21)${RESET}"
+    echo -e "  ${DGRAY}    go install charm.land/gum/v2@latest${RESET}"
+    echo ""
+    divider
+    info "More information: https://github.com/charmbracelet/gum#installation"
+    info "Fresh SnowFoxOS installs include gum automatically (install.sh)."
+    echo ""
+}
+
+# ============================================================
+#  Screens
+# ============================================================
+_music_main_menu() {
+    _music_banner
+    echo "" >&2
+    gum style --foreground "$GUM_DIM" --padding "0 2" \
+        "Source: $(_music_src_display)    ·    Playlists: $(_pl_count)" 1>&2
+    echo "" >&2
+    _music_choose "What would you like to do?" 7 \
+        "🎵  Browse & Search" \
+        "📂  Playlists" \
+        "🎧  Streaming Source" \
+        "🔗  Stream direct URL" \
+        "🚪  Quit"
+}
+
+_music_browse() {
+    local src prefix source_name
+    src="$(_get_source)"
+    prefix="$(_music_src_prefix)"
+    source_name="$(_music_src_display)"
+
+    local query st
+    query=$(_music_input "Search · $source_name" "Song, artist or genre — empty = top recommendations")
+    st=$?
+    [[ $st -ne 0 ]] && return
 
     if [[ -z "$query" ]]; then
         case "$src" in
-            ytmusic) query="top hits 2026 trending music";;
-            spotify) query="global top 50 popular hits";;
-            soundcloud) query="electronic chill mix 2026";;
-            *) query="top music playlist";;
+            ytmusic)    query="top hits 2026 trending music" ;;
+            spotify)    query="global top 50 popular hits" ;;
+            soundcloud) query="electronic chill mix 2026" ;;
+            *)          query="top music playlist" ;;
         esac
     fi
 
-    fox "Fetching recommendations from $source_name..."
+    local tmp
+    tmp=$(mktemp)
 
-    local -a RESULTS
-    mapfile -t RESULTS < <(yt-dlp --force-ipv4 \
-        --extractor-args "youtube:player_client=web,android" \
-        --print "%(title)s|%(id)s" \
-        --flat-playlist "${prefix}10:$query" 2>/dev/null)
+    _music_spin "Searching $source_name …" \
+        bash -c 'yt-dlp --force-ipv4 --extractor-args "youtube:player_client=web,android" --print "%(title)s|%(id)s" --flat-playlist "${1}10:${2}" > "$3" 2>/dev/null' \
+        _ "$prefix" "$query" "$tmp"
 
-    if [[ ${#RESULTS[@]} -eq 0 ]]; then
-        # Fallback to standard ytsearch if specialized prefix returns nothing
-        mapfile -t RESULTS < <(yt-dlp --force-ipv4 \
-            --print "%(title)s|%(id)s" \
-            --flat-playlist "ytsearch10:$query" 2>/dev/null)
+    local -a results=()
+    mapfile -t results < "$tmp"
+
+    if [[ ${#results[@]} -eq 0 ]]; then
+        _music_spin "Trying standard YouTube search …" \
+            bash -c 'yt-dlp --force-ipv4 --print "%(title)s|%(id)s" --flat-playlist "ytsearch10:${1}" > "$2" 2>/dev/null' \
+            _ "$query" "$tmp"
+        mapfile -t results < "$tmp"
     fi
+    rm -f "$tmp"
 
-    if [[ ${#RESULTS[@]} -eq 0 ]]; then
+    if [[ ${#results[@]} -eq 0 ]]; then
         err "No results found."
-        read -rp "Press Enter to continue..."
+        sleep 2
         return
     fi
 
-    clear
-    header "Results for: $query"
-    for i in "${!RESULTS[@]}"; do
-        local title="${RESULTS[$i]%|*}"
-        echo -e "  ${CYAN}$((i+1))${RESET}) $title"
+    local -a titles=()
+    local r
+    for r in "${results[@]}"; do
+        titles+=("${r%|*}")
     done
-    divider
-    echo -e "  ${CYAN}a [1-N]${RESET}) Add song to playlist"
-    echo -e "  ${CYAN}[1-N]${RESET}  ) Play track immediately"
-    echo -e "  ${CYAN}b${RESET}      ) Back"
-    echo ""
-    read -rp "$(echo -e ${PURPLE}${BOLD}"Selection (e.g. '1' or 'a 1'): "${RESET})" action_choice
 
-    if [[ "$action_choice" =~ ^[bB]$ ]]; then
-        return
-    elif [[ "$action_choice" =~ ^[aA][[:space:]]+([0-9]+)$ ]]; then
-        local idx="${BASH_REMATCH[1]}"
-        if [[ "$idx" -ge 1 && "$idx" -le "${#RESULTS[@]}" ]]; then
-            local sel="${RESULTS[$((idx-1))]}"
-            local title="${sel%|*}"
-            local id="${sel##*|}"
-            local url=""
-            if [[ "$id" =~ ^[A-Za-z0-9_-]{11}$ ]]; then
-                url="https://www.youtube.com/watch?v=$id"
-            else
-                url="ytsearch1:$title"
-            fi
-            _music_add_to_playlist_prompt "$title" "$url" "$source_name"
-        fi
-    elif [[ "$action_choice" =~ ^[0-9]+$ ]]; then
-        local idx="$action_choice"
-        if [[ "$idx" -ge 1 && "$idx" -le "${#RESULTS[@]}" ]]; then
-            local sel="${RESULTS[$((idx-1))]}"
-            local title="${sel%|*}"
-            local id="${sel##*|}"
-            local url=""
-            if [[ "$id" =~ ^[A-Za-z0-9_-]{11}$ ]]; then
-                url="https://www.youtube.com/watch?v=$id"
-            else
-                url="ytsearch1:$title"
-            fi
-            
-            LAST_TRACK_TITLE="$title"
-            LAST_TRACK_URL="$url"
-            LAST_TRACK_SOURCE="$source_name"
+    local selected
+    selected=$(printf '%s\n' "${titles[@]}" | _music_filter \
+        "Results for \"$query\" · $source_name" \
+        "Type to filter — Enter to select" 15)
+    st=$?
+    [[ $st -ne 0 || -z "$selected" ]] && return
 
-            clear
-            header "Now Playing"
-            row "Track" "$title" "$GREEN"
-            row "Source" "$source_name" "$CYAN"
-            echo ""
-            echo -e "${PURPLE}${BOLD}  mpv controls:${RESET}"
-            echo -e "    ${CYAN}Space${RESET} — Pause/Play | ${CYAN}9/0${RESET} — Volume | ${CYAN}q${RESET} — Quit"
-            echo ""
-            fox "Streaming..."
-            mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" "$url"
-            
-            echo ""
-            read -rp "Add this track to a playlist? [y/N]: " add_YN
-            if [[ "$add_YN" =~ ^[yY]$ ]]; then
-                _music_add_to_playlist_prompt "$title" "$url" "$source_name"
-            fi
+    # Resolve selected title back to its video ID / URL
+    local id="" url=""
+    for r in "${results[@]}"; do
+        if [[ "${r%|*}" == "$selected" ]]; then
+            id="${r##*|}"
+            break
         fi
+    done
+    if [[ "$id" =~ ^[A-Za-z0-9_-]{11}$ ]]; then
+        url="https://www.youtube.com/watch?v=$id"
+    else
+        url="ytsearch1:$selected"
     fi
+
+    local action
+    action=$(_music_choose "🎵  $selected" 4 \
+        "▶   Play now" \
+        "➕   Add to playlist" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$action" ]] && return
+
+    case "$action" in
+        *Play*) _music_play "$selected" "$url" "$source_name" ;;
+        *Add*)  _music_add_to_playlist "$selected" "$url" "$source_name" ;;
+    esac
+}
+
+_music_play() {
+    # _music_play <title> <url> <source> [ask_to_save: 0|1]
+    local title="$1" url="$2" src="$3" ask_save="${4:-1}"
+
+    _music_banner "Now Playing"
+    echo "" >&2
+    gum style --border normal --border-foreground "$GUM_PURPLE" \
+        --padding "1 3" \
+        "▶   $title" \
+        "📡  $src" 1>&2
+    echo "" >&2
+    gum style --foreground "$GUM_DIM" --padding "0 4" \
+        "mpv — [Space] pause · [←/→] seek · [9/0] volume · [q] quit" 1>&2
+    echo "" >&2
+    fox "Streaming…"
+    mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" "$url"
+
+    if [[ "$ask_save" == "1" ]] && \
+       gum confirm "Add \"$title\" to a playlist?" \
+            --affirmative "Yes, save it" \
+            --negative "No thanks" \
+            --prompt.foreground "$GUM_PURPLE_LT" \
+            --selected.background "$GUM_PURPLE"; then
+        _music_add_to_playlist "$title" "$url" "$src"
+    fi
+}
+
+_music_add_to_playlist() {
+    local title="$1" url="$2" src="$3"
+
+    local -a names=()
+    local name count
+    while IFS=$'\t' read -r name count; do
+        [[ -n "$name" ]] && names+=("$name")
+    done < <(_pl_list)
+
+    local target
+    if [[ ${#names[@]} -gt 0 ]]; then
+        target=$({ printf '%s\n' "${names[@]}"; printf '%s\n' "➕  Create new playlist …"; } | _music_filter \
+            "Add to playlist · $title" \
+            "Filter playlists or create a new one" 12)
+        local st=$?
+        [[ $st -ne 0 || -z "$target" ]] && return
+    else
+        target="➕  Create new playlist …"
+    fi
+
+    if [[ "$target" == *"Create new playlist"* ]]; then
+        target=$(_music_input "New playlist" "Playlist name")
+        [[ -z "$target" ]] && return
+        _pl_create "$target" || true
+    fi
+
+    if _pl_add "$target" "$title" "$url" "$src"; then
+        ok "Added \"$title\" to playlist \"$target\"."
+    else
+        err "Could not save track to \"$target\"."
+    fi
+    sleep 1
 }
 
 _music_playlists_menu() {
     while true; do
-        clear
-        header "Playlist Manager"
+        _music_banner "Playlists"
 
-        python3 - "$PLAYLIST_FILE" <<'PYEOF'
-import sys, json
-try:
-    with open(sys.argv[1], 'r') as f:
-        data = json.load(f)
-    if not data:
-        print("  (No playlists created yet)")
-    else:
-        for i, (name, tracks) in enumerate(data.items(), 1):
-            print(f"  {i}) 📁 {name} ({len(tracks)} tracks)")
-except Exception:
-    print("  (No playlists created yet)")
-PYEOF
+        local -a names=() entries=()
+        local name count
+        while IFS=$'\t' read -r name count; do
+            [[ -z "$name" ]] && continue
+            names+=("$name")
+            entries+=("📁  $name  ($count tracks)")
+        done < <(_pl_list)
 
-        echo ""
-        echo -e "  ${CYAN}c${RESET}) Create new playlist"
-        echo -e "  ${CYAN}p [N]${RESET}) Play playlist N"
-        echo -e "  ${CYAN}v [N]${RESET}) View tracks in playlist N"
-        echo -e "  ${CYAN}d [N]${RESET}) Delete playlist N"
-        echo -e "  ${CYAN}b${RESET}) Back to main menu"
-        echo ""
-        divider
-        read -rp "$(echo -e ${PURPLE}${BOLD}"Action: "${RESET})" pl_action
+        local choice st
+        choice=$(_music_choose "" 15 "${entries[@]}" \
+            "➕  Create new playlist" \
+            "↩   Back")
+        st=$?
+        [[ $st -ne 0 || -z "$choice" ]] && return
 
-        if [[ "$pl_action" =~ ^[bB]$ ]]; then
-            break
-        elif [[ "$pl_action" =~ ^[cC][[:space:]]*$|^[cC]$ ]]; then
-            read -rp "Enter new playlist name: " pl_name
-            if [[ -n "$pl_name" ]]; then
-                python3 - "$PLAYLIST_FILE" "$pl_name" <<'PYEOF'
-import sys, json
-path, name = sys.argv[1], sys.argv[2]
-try:
-    with open(path, 'r') as f:
-        data = json.load(f)
-except:
-    data = {}
-if name not in data:
-    data[name] = []
-    with open(path, 'w') as f:
-        json.dump(data, f, indent=2)
-    print(f"Playlist '{name}' created successfully.")
-else:
-    print(f"Playlist '{name}' already exists.")
-PYEOF
-                ok "Playlist created!"
-                sleep 1
-            fi
-        elif [[ "$pl_action" =~ ^[vV][[:space:]]+([0-9]+)$ ]]; then
-            local idx="${BASH_REMATCH[1]}"
-            _music_view_playlist "$idx"
-        elif [[ "$pl_action" =~ ^[pP][[:space:]]+([0-9]+)$ ]]; then
-            local idx="${BASH_REMATCH[1]}"
-            _music_play_playlist "$idx"
-        elif [[ "$pl_action" =~ ^[dD][[:space:]]+([0-9]+)$ ]]; then
-            local idx="${BASH_REMATCH[1]}"
-            python3 - "$PLAYLIST_FILE" "$idx" <<'PYEOF'
-import sys, json
-path, idx = sys.argv[1], int(sys.argv[2])
-try:
-    with open(path, 'r') as f:
-        data = json.load(f)
-    keys = list(data.keys())
-    if 1 <= idx <= len(keys):
-        removed = keys[idx-1]
-        del data[removed]
-        with open(path, 'w') as f:
-            json.dump(data, f, indent=2)
-        print(f"Removed playlist '{removed}'.")
-except Exception as e:
-    print(f"Error: {e}")
-PYEOF
-            ok "Playlist deleted."
-            sleep 1
-        fi
+        case "$choice" in
+            *"Create new playlist"*) _music_playlist_create ;;
+            *Back*)                  return ;;
+            *)
+                local i
+                for i in "${!entries[@]}"; do
+                    if [[ "${entries[$i]}" == "$choice" ]]; then
+                        _music_playlist_actions "${names[$i]}"
+                        break
+                    fi
+                done
+                ;;
+        esac
     done
 }
 
-_music_add_to_playlist_prompt() {
-    local title="$1"
-    local url="$2"
-    local source="$3"
+_music_playlist_actions() {
+    local name="$1" count
+    count=$(_pl_track_count "$name")
 
-    clear
-    header "Add to Playlist"
-    echo -e "Track: ${BOLD}$title${RESET}"
-    echo ""
+    local action st
+    action=$(_music_choose "📁  $name  ·  $count tracks" 6 \
+        "▶   Play playlist" \
+        "👁   View tracks" \
+        "🗑   Delete playlist" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$action" ]] && return
 
-    python3 - "$PLAYLIST_FILE" <<'PYEOF'
-import sys, json
-try:
-    with open(sys.argv[1], 'r') as f:
-        data = json.load(f)
-    if not data:
-        print("  No playlists available.")
-    else:
-        for i, name in enumerate(data.keys(), 1):
-            print(f"  {i}) {name}")
-except:
-    print("  No playlists available.")
-PYEOF
+    case "$action" in
+        *Play*)   _music_playlist_play "$name" ;;
+        *View*)   _music_playlist_view "$name" ;;
+        *Delete*) _music_playlist_delete "$name" ;;
+    esac
+}
 
-    echo ""
-    read -rp "Select playlist number (or 'c' to create new): " pl_choice
-    if [[ "$pl_choice" =~ ^[cC]$ ]]; then
-        read -rp "New playlist name: " pl_name
-        if [[ -n "$pl_name" ]]; then
-            python3 - "$PLAYLIST_FILE" "$pl_name" "$title" "$url" "$source" <<'PYEOF'
-import sys, json
-path, name, title, url, src = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
-try:
-    with open(path, 'r') as f:
-        data = json.load(f)
-except:
-    data = {}
-if name not in data:
-    data[name] = []
-data[name].append({"title": title, "url": url, "source": src})
-with open(path, 'w') as f:
-    json.dump(data, f, indent=2)
-PYEOF
-            ok "Created playlist '$pl_name' and added track!"
-            sleep 1
-        fi
-    elif [[ "$pl_choice" =~ ^[0-9]+$ ]]; then
-        python3 - "$PLAYLIST_FILE" "$pl_choice" "$title" "$url" "$source" <<'PYEOF'
-import sys, json
-path, idx, title, url, src = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
-try:
-    with open(path, 'r') as f:
-        data = json.load(f)
-    keys = list(data.keys())
-    if 1 <= idx <= len(keys):
-        name = keys[idx-1]
-        data[name].append({"title": title, "url": url, "source": src})
-        with open(path, 'w') as f:
-            json.dump(data, f, indent=2)
-        print(f"Added to '{name}'.")
-except Exception as e:
-    print(f"Error: {e}")
-PYEOF
-        ok "Track added to playlist successfully!"
-        sleep 1
+_music_playlist_create() {
+    local name
+    name=$(_music_input "Create a new playlist" "e.g. Chill Vibes")
+    [[ -z "$name" ]] && return
+
+    if _pl_create "$name"; then
+        ok "Playlist \"$name\" created."
+    else
+        warn "Playlist \"$name\" already exists."
     fi
+    sleep 1
 }
 
-_music_view_playlist() {
-    local idx="$1"
-    clear
-    python3 - "$PLAYLIST_FILE" "$idx" <<'PYEOF'
-import sys, json
-path, idx = sys.argv[1], int(sys.argv[2])
-try:
-    with open(path, 'r') as f:
-        data = json.load(f)
-    keys = list(data.keys())
-    if 1 <= idx <= len(keys):
-        name = keys[idx-1]
-        tracks = data[name]
-        print(f"Playlist: {name} ({len(tracks)} tracks)\n" + "─"*40)
-        for i, t in enumerate(tracks, 1):
-            print(f"  {i}. {t.get('title')} [{t.get('source', 'Web')}]")
-    else:
-        print("Invalid playlist index.")
-except Exception as e:
-    print(f"Error: {e}")
-PYEOF
-    echo ""
-    read -rp "Press Enter to return..."
+_music_playlist_view() {
+    local name="$1" tmp
+    _music_banner "Playlist · $name"
+
+    tmp=$(mktemp)
+    _pl_dump "$name" > "$tmp"
+    gum pager --show-line-numbers \
+        --line-number.foreground "$GUM_DIM" \
+        --match.foreground "$GUM_PURPLE_LT" < "$tmp"
+    rm -f "$tmp"
 }
 
-_music_play_playlist() {
-    local idx="$1"
-    local urls_file
+_music_playlist_play() {
+    local name="$1" urls_file count
     urls_file=$(mktemp)
-
-    python3 - "$PLAYLIST_FILE" "$idx" "$urls_file" <<'PYEOF'
-import sys, json
-path, idx, outpath = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-try:
-    with open(path, 'r') as f:
-        data = json.load(f)
-    keys = list(data.keys())
-    if 1 <= idx <= len(keys):
-        name = keys[idx-1]
-        with open(outpath, 'w') as out:
-            for t in data[name]:
-                out.write(t.get('url') + "\n")
-except Exception as e:
-    pass
-PYEOF
+    count=$(_pl_urls "$name" "$urls_file")
 
     if [[ ! -s "$urls_file" ]]; then
-        err "Playlist is empty or invalid."
         rm -f "$urls_file"
+        err "Playlist \"$name\" is empty."
         sleep 1
         return
     fi
 
-    fox "Playing playlist via mpv..."
+    _music_banner "Playing · $name"
+    echo "" >&2
+    gum style --foreground "$GUM_DIM" --padding "0 4" \
+        "$count tracks queued in mpv — [q] to stop" 1>&2
+    echo "" >&2
     mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" --playlist="$urls_file"
     rm -f "$urls_file"
+}
+
+_music_playlist_delete() {
+    local name="$1" count
+    count=$(_pl_track_count "$name")
+
+    if gum confirm "Delete playlist \"$name\" ($count tracks)?" \
+        --affirmative "Delete" \
+        --negative "Cancel" \
+        --prompt.foreground "$GUM_PURPLE_LT" \
+        --selected.background "$GUM_RED"; then
+        if _pl_delete "$name"; then
+            ok "Playlist \"$name\" deleted."
+        else
+            err "Could not delete playlist \"$name\"."
+        fi
+        sleep 1
+    fi
+}
+
+_music_source_menu() {
+    _music_banner "Streaming Source"
+    echo "" >&2
+    gum style --foreground "$GUM_DIM" --padding "0 2" \
+        "Active: $(_music_src_display) — used by Browse & Search" 1>&2
+    echo "" >&2
+
+    local choice st
+    choice=$(_music_choose "Pick a search backend" 7 \
+        "🎵  YouTube Music — best music catalog (default)" \
+        "🎧  Spotify — track search via yt-dlp" \
+        "☁️   SoundCloud — indie artists & mixes" \
+        "▶️   YouTube — standard video search" \
+        "↩   Back")
+    st=$?
+    [[ $st -ne 0 || -z "$choice" ]] && return
+
+    local new_src="" label=""
+    case "$choice" in
+        *"YouTube Music"*) new_src="ytmusic";    label="YouTube Music" ;;
+        *Spotify*)         new_src="spotify";    label="Spotify" ;;
+        *SoundCloud*)      new_src="soundcloud"; label="SoundCloud" ;;
+        *YouTube*)         new_src="youtube";    label="YouTube" ;;
+        *)                 return ;;
+    esac
+
+    _set_source "$new_src"
+    ok "Streaming source set to $label."
+    sleep 1
+}
+
+_music_stream_url() {
+    _music_banner "Stream Direct URL"
+    echo "" >&2
+
+    local url st
+    url=$(_music_input "Paste a direct link (YouTube, SoundCloud, …)" "https://…")
+    st=$?
+    [[ $st -ne 0 || -z "$url" ]] && return
+
+    _music_play "Direct stream" "$url" "Direct URL" 0
+}
+
+_music_exit() {
+    _music_banner
+    ok "Exiting SnowFox Music — see you next time! 🦊"
+    sleep 1
+}
+
+# ============================================================
+#  Entry point
+# ============================================================
+cmd_music() {
+    # ── Dependency checks ────────────────────────────────────
+    if ! command -v gum &>/dev/null; then
+        _music_gum_missing
+        return 1
+    fi
+    if ! command -v mpv &>/dev/null; then
+        err "mpv not found. Install: sudo apt install mpv"
+        return 1
+    fi
+    if ! command -v yt-dlp &>/dev/null; then
+        err "yt-dlp not found. Install: sudo apt install yt-dlp"
+        return 1
+    fi
+
+    _init_playlists
+
+    while true; do
+        local choice st
+        choice=$(_music_main_menu)
+        st=$?
+        if [[ $st -ne 0 || -z "$choice" ]]; then
+            return 0                    # ESC / Ctrl-C → leave the app
+        fi
+        case "$choice" in
+            *Browse*)        _music_browse ;;
+            *Playlists*)     _music_playlists_menu ;;
+            *Source*)        _music_source_menu ;;
+            *"direct URL"*)  _music_stream_url ;;
+            *Quit*)          _music_exit; return 0 ;;
+        esac
+    done
 }
