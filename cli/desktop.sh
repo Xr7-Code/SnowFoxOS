@@ -198,6 +198,19 @@ cmd_webapp() {
     esac
 }
 
+# ── Zen Browser executable ───────────────────────────────────
+# The SnowFoxOS installer drops Zen at /opt/zen-browser.AppImage
+# (there is no "zen-browser" command in PATH by default).
+_webapp_zen_bin() {
+    if command -v zen-browser &>/dev/null; then
+        command -v zen-browser
+    elif [[ -x /opt/zen-browser.AppImage ]]; then
+        echo "/opt/zen-browser.AppImage"
+    else
+        return 1
+    fi
+}
+
 _webapp_add() {
     local name="$1"
     local url="$2"
@@ -205,6 +218,13 @@ _webapp_add() {
     if [[ -z "$name" || -z "$url" ]]; then
         err "Usage: snowfox web add <name> <url>"
         err "Example: snowfox web add ChatGPT https://chatgpt.com"
+        exit 1
+    fi
+
+    local zen_bin
+    if ! zen_bin=$(_webapp_zen_bin); then
+        err "Zen Browser not found."
+        info "WebApps need Zen Browser — reinstall it with the SnowFoxOS installer."
         exit 1
     fi
 
@@ -268,7 +288,7 @@ user_pref("browser.fullscreen.autohide", true);
 user_pref("dom.disable_open_during_load", false);
 JSEOF
 
-    local exec_cmd="zen-browser --profile \"$profile_dir\" --new-window \"$url\""
+    local exec_cmd="$zen_bin --profile \"$profile_dir\" --new-window \"$url\""
 
     # ── Create .desktop entry ────────────────────────────────
     cat > "$WEBAPP_DESK/snowfox-webapp-${safe}.desktop" << DEOF

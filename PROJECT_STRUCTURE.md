@@ -14,7 +14,7 @@ SnowFoxOS/
 ├── note.txt                          # Project philosophy & core principles
 ├── README.md                         # Main documentation & feature overview
 ├── PROJECT_STRUCTURE.md              # English project structure & script documentation
-├── snowfox-sanctuary.md              # Documentation for Focus/Sanctuary module (snowfox den)
+├── SNOWFOX-SANCTUARY.MD              # Architecture & user guide for SnowFox Den (focus/sovereignty)
 ├── snowfoxos-iso_builder-readme.md   # Guide & process for the ISO builder
 ├── snowfoxos-v3_display-freeze.md    # Debugging report for AMD+NVIDIA Hybrid freeze fix
 ├── LICENSE                           # GNU General Public License v3.0 (GPL-3.0)
@@ -82,13 +82,7 @@ SnowFoxOS/
 │   ├── xorg/                         # X11 touchpad configuration (30-touchpad.conf)
 │   └── applications/                 # .desktop files for Rofi (Network, Bluetooth, LF)
 │
-├── iso-builder/                      # Standalone bootable ISO creation
-│   ├── build-iso.sh                  # Main build script for live-build (ISO generation)
-│   ├── live-build/hooks/
-│   │   └── 01-cache.sh               # Build hook to trim the live environment
-│   └── installer/
-│       ├── tui-installer.sh          # Dialog-based TUI installer on the ISO
-│       └── auto-install.sh           # First-boot unattended wrapper for install.sh
+├── iso-builder/                      # Standalone bootable ISO creation (currently under active revision / empty)
 │
 ├── completions/
 │   └── snowfox-completion.bash       # Auto-completion for snowfox CLI in Bash
@@ -340,26 +334,9 @@ CLI modules reside at `/usr/local/lib/snowfox/cli/` after installation and are m
 
 ---
 
-## 💿 ISO Builder & Custom Installer (`iso-builder/`)
+## 💿 ISO Builder (`iso-builder/`)
 
-Generates bootable, standalone ISOs for SnowFoxOS.
-
-### 1. `iso-builder/build-iso.sh`
-- Main build script using `live-build`.
-- Installs build dependencies, configures live system (`Debian 12 Bookworm amd64`), embeds SnowFoxOS repository to `/opt/SnowFoxOS-v3`, and sets up the TUI installer.
-- Outputs `SnowFoxOS-v3.iso`.
-
-### 2. `iso-builder/installer/tui-installer.sh`
-- Dialog-based Text User Interface (TUI) installer that launches automatically upon booting the ISO.
-- Configures keyboard layout, username, password, hostname, target disk, and partition scheme (GPT+EFI, MBR, or GPT+EFI with separate `/home`).
-- Runs `debootstrap`, installs GRUB bootloader, copies repository to target system, and registers `snowfox-firstboot.service`.
-
-### 3. `iso-builder/installer/auto-install.sh`
-- First-boot wrapper on the installed system.
-- Overrides interactive prompts in `install.sh` with defaults (unattended install) and disables firstboot service upon completion.
-
-### 4. `iso-builder/live-build/hooks/01-cache.sh`
-- Build hook executed inside live chroot during ISO build to purge unnecessary documentation/locales and enable automatic TUI installer launch on TTY1.
+- `iso-builder/`: Currently under active revision / empty in preparation for updated ISO build tooling.
 
 ---
 
@@ -374,8 +351,8 @@ Generates bootable, standalone ISOs for SnowFoxOS.
 
 - `README.md`: Main manual containing feature overview, keyboard shortcuts, RAM benchmarks, security hardening specs, and hardware limitations.
 - `PROJECT_STRUCTURE.md`: Comprehensive project directory structure and script documentation.
+- `SNOWFOX-SANCTUARY.MD`: Architecture, media gradient, and user guide for the SnowFox Den focus/sovereignty module.
 - `snowfoxos-iso_builder-readme.md`: Technical documentation and usage guide for the ISO builder.
 - `snowfoxos-v3_display-freeze.md`: In-depth analysis and debugging report for AMD+NVIDIA PRIME hybrid GPU freezes.
-- `snowfox-sanctuary.md`: Architecture and user guide for the `snowfox den` focus and distraction blocker module.
 - `note.txt`: Summary of the 5 core tenets of SnowFoxOS (Sovereign-First, Zero-Infrastructure, Mesh-Native, Hyper-Resilient, Ultra-Low-Resource).
 - `LICENSE`: Project license (GNU General Public License v3.0 - GPL-3.0).

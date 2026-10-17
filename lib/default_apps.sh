@@ -27,7 +27,12 @@ echo -e "  1) PCManFM (graphical, lightweight — recommended)"
 echo -e "  2) MC      (terminal, already installed)"
 echo -e "  3) Both"
 echo ""
-read -rp "$(echo -e ${PURPLE}${BOLD}"Choice [1-3]: "${RESET})" FM_CHOICE
+if [[ "$SNOWFOX_UNATTENDED" == "true" ]] || [[ ! -t 0 ]]; then
+    FM_CHOICE="1"
+    info "Unattended mode: selecting PCManFM (1)"
+else
+    read -rp "$(echo -e ${PURPLE}${BOLD}"Choice [1-3]: "${RESET})" FM_CHOICE
+fi
 case "$FM_CHOICE" in
     1|3) apt-get install -y pcmanfm gvfs gvfs-backends
          success "PCManFM installed" ;;

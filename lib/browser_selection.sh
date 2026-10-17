@@ -21,7 +21,12 @@ echo -e "  4) Firefox-ESR  (standard, stable)"
 echo -e "  5) Chromium     (lightweight)"
 echo -e "  6) None"
 echo ""
-read -rp "$(echo -e ${PURPLE}${BOLD}"Choice [1-6]: "${RESET})" BROWSER_CHOICE
+if [[ "$SNOWFOX_UNATTENDED" == "true" ]] || [[ ! -t 0 ]]; then
+    BROWSER_CHOICE="1"
+    info "Unattended mode: selecting Zen Browser (1)"
+else
+    read -rp "$(echo -e ${PURPLE}${BOLD}"Choice [1-6]: "${RESET})" BROWSER_CHOICE
+fi
 
 DEFAULT_BROWSER_DESKTOP="firefox-esr.desktop"
 case "$BROWSER_CHOICE" in

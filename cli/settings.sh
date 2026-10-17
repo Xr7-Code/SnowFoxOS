@@ -17,7 +17,7 @@ _init_settings() {
 #  SnowFoxOS — Default applications & preferences
 # ============================================================
 
-DEFAULT_BROWSER=librewolf
+DEFAULT_BROWSER=zen-browser
 DEFAULT_TERMINAL=kitty
 DEFAULT_EDITOR=geany
 DEFAULT_FILEMANAGER=pcmanfm
@@ -71,7 +71,7 @@ cmd_settings_overview() {
 
     # ── Default applications ─────────────────────────────────
     section "Default Applications"
-    row "Browser"      "$(get_setting DEFAULT_BROWSER librewolf)"
+    row "Browser"      "$(get_setting DEFAULT_BROWSER zen-browser)"
     row "Terminal"     "$(get_setting DEFAULT_TERMINAL kitty)"
     row "Editor"       "$(get_setting DEFAULT_EDITOR geany)"
     row "File manager" "$(get_setting DEFAULT_FILEMANAGER pcmanfm)"
@@ -476,7 +476,7 @@ cmd_defaults() {
             ;;
         status|"")
             header "Default Applications"
-            row "Browser"      "$(get_setting DEFAULT_BROWSER librewolf)"
+            row "Browser"      "$(get_setting DEFAULT_BROWSER zen-browser)"
             row "Terminal"     "$(get_setting DEFAULT_TERMINAL kitty)"
             row "Editor"       "$(get_setting DEFAULT_EDITOR geany)"
             row "File manager" "$(get_setting DEFAULT_FILEMANAGER pcmanfm)"

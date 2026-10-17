@@ -42,6 +42,7 @@ cmd_help() {
     echo ""
 
     _help_section "Media"
+    _help_cmd "snowfox music"                    "TUI music streaming app (YT Music, Spotify, SoundCloud)"
     _help_cmd "snowfox stream <search|URL>"      "Stream video/audio via mpv"
     _help_cmd "snowfox dl <URL>"                 "Download video or audio"
     _help_cmd "snowfox fetch <URL>"              "High-speed download (16 connections)"

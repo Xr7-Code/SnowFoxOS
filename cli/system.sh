@@ -439,8 +439,9 @@ function_reset_system() {
         TMP_DIR=$(mktemp -d)
 
         if git clone --depth=1 "$REPO_URL" "$TMP_DIR" 2>/dev/null; then
-            cp -r "$TMP_DIR"/.config "$HOME/" 2>/dev/null
-            cp -r "$TMP_DIR"/wallpapers "$HOME/" 2>/dev/null
+            mkdir -p "$HOME/.config" "$HOME/Pictures/wallpapers"
+            cp -r "$TMP_DIR"/configs/. "$HOME/.config/" 2>/dev/null
+            cp -r "$TMP_DIR"/wallpapers/. "$HOME/Pictures/wallpapers/" 2>/dev/null
             cp "$TMP_DIR"/snowfox "$HOME/" 2>/dev/null
             chmod +x "$HOME/snowfox"
             if [[ -d "$TMP_DIR/cli" ]]; then
@@ -451,7 +452,11 @@ function_reset_system() {
                 sudo chmod +x /usr/local/bin/snowfox
             fi
             rm -rf "$TMP_DIR"
-            echo -e "\e[32m[+]\e[0m Factory configurations restored."
+            if [[ -f "$HOME/.config/i3/config" ]]; then
+                echo -e "\e[32m[+]\e[0m Factory configurations restored."
+            else
+                echo -e "\e[31m[!]\e[0m Error: Configuration files could not be restored.\e[0m"
+            fi
         else
             echo -e "\e[31m[!]\e[0m Error: Could not clone repository. Check internet connection.\e[0m"
         fi

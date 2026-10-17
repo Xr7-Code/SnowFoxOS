@@ -2,14 +2,14 @@
 
 <img src="assets/fuchs.png" width="120" alt="SnowFox Logo"/>
 
-# SnowFoxOS
+# SnowFoxOS v3
 
 **A lean, privacy-oriented i3 desktop based on Debian 12**
 
 ![Version](https://img.shields.io/badge/version-v3-9B59B6?style=flat-square)
 ![Debian](https://img.shields.io/badge/base-Debian%2012-A81D33?style=flat-square&logo=debian&logoColor=white)
 ![i3](https://img.shields.io/badge/desktop-i3%2FX11-3a86ff?style=flat-square)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+![License](https://img.shields.io/badge/license-SnowFox%20Public%20License-9B59B6?style=flat-square)
 
 </div>
 

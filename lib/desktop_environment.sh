@@ -153,8 +153,18 @@ Type=Application
 Categories=System;FileManager;
 EOF
 
+cat > "$TARGET_HOME/.local/share/applications/snowfox-music.desktop" << 'EOF'
+[Desktop Entry]
+Name=Musik
+Comment=SnowFox Stream & Music Player (TUI)
+Exec=kitty -e snowfox music
+Icon=applications-multimedia
+Type=Application
+Categories=AudioVideo;Audio;Player;
+EOF
+
 chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.local/share/applications"
-success "Desktop entries for Network, Bluetooth, Files installed (Rofi-ready)"
+success "Desktop entries for Network, Bluetooth, Files, Music installed (Rofi-ready)"
 
 # Touchpad config
 mkdir -p /etc/X11/xorg.conf.d
@@ -187,7 +197,7 @@ fi
 
 cat > "$TARGET_HOME/.xinitrc" << 'EOF'
 #!/bin/sh
-export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games
 
 export GTK_THEME=Arc-Dark
 export QT_QPA_PLATFORMTHEME=qt5ct

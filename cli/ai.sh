@@ -121,10 +121,12 @@ _ai_ask() {
 
 # ── Main command ─────────────────────────────────────────────
 cmd_ai() {
-    local MODEL_ARG="${2:-}"   # snowfox ai [model]
+    # The dispatcher already shifted "ai" away — $1/$2 are the
+    # sub-command/model arguments (like snowfox snap does).
+    local MODEL_ARG="${1:-}"   # snowfox ai [model]
 
     # Sub-commands
-    case "$2" in
+    case "$1" in
         models|list)
             header "AI — Installed Models"
             local list
@@ -144,11 +146,11 @@ cmd_ai() {
             return
             ;;
         pull)
-            if [[ -z "$3" ]]; then
+            if [[ -z "$2" ]]; then
                 err "Usage: snowfox ai pull <model>"
                 exit 1
             fi
-            ollama pull "$3"
+            ollama pull "$2"
             return
             ;;
         history)
@@ -158,7 +160,7 @@ cmd_ai() {
                 echo ""
                 return
             fi
-            local n="${3:-20}"
+            local n="${2:-20}"
             tail -n "$n" "$_AI_HISTORY_FILE" 2>/dev/null | while IFS= read -r line; do
                 local role ts content
                 role=$(echo "$line" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("role","?"))' 2>/dev/null)

@@ -5,8 +5,15 @@
 #  SnowFox Public License v1.0
 # ============================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Installed path of the CLI modules
 CLI_DIR="/usr/local/lib/snowfox/cli"
+
+if [[ ! -d "$CLI_DIR" || ! -f "$CLI_DIR/music.sh" ]]; then
+    if [[ -d "$SCRIPT_DIR/cli" ]]; then
+        CLI_DIR="$SCRIPT_DIR/cli"
+    fi
+fi
 
 if [[ ! -d "$CLI_DIR" ]]; then
     echo -e "\033[0;31m\033[1m[ERROR]\033[0m CLI modules not found in $CLI_DIR"
@@ -23,6 +30,7 @@ source "$CLI_DIR/status.sh"
 source "$CLI_DIR/system.sh"
 source "$CLI_DIR/hardware.sh"
 source "$CLI_DIR/media.sh"
+source "$CLI_DIR/music.sh"
 source "$CLI_DIR/security.sh"
 source "$CLI_DIR/desktop.sh"
 source "$CLI_DIR/stash.sh"
@@ -57,16 +65,15 @@ case "$1" in
     # ── Hardware & Privacy ───────────────────────────────────
     gpu)            cmd_gpu ;;
     kill)           cmd_kill "$2" ;;
-    air|airmode)    cmd_airmode "$2" ;;
-    audit)          cmd_audit ;;
-    pass)           cmd_pass "$2" "$3" ;;
-    tip)            cmd_tip ;;
+    air|airmode)    cmd_air "$2" ;;
+    audit)          cmd_audit "$2" ;;
     tor)            cmd_tor "$2" ;;
 
     # ── Media ────────────────────────────────────────────────
     stream)         cmd_stream "${@:2}" ;;
     dl|download)    cmd_download "$2" ;;
     fetch)          cmd_fetch "$2" ;;
+    music|m)        cmd_music ;;
 
     # ── Desktop ──────────────────────────────────────────────
     auto|autostart) cmd_start "$2" "$3" ;;

@@ -25,8 +25,21 @@ step() {
 }
 
 ask_install() {
+    local prompt_text="$1"
+    if [[ "$SNOWFOX_UNATTENDED" == "true" ]] || [[ ! -t 0 ]]; then
+        case "$prompt_text" in
+            *"Mesh"*|*"Reticulum"*|*"Console Launcher"*|*"bluetui"*|*"Bluetooth"*)
+                info "Auto-installing (unattended): $prompt_text"
+                return 0
+                ;;
+            *)
+                info "Skipping (unattended): $prompt_text"
+                return 1
+                ;;
+        esac
+    fi
     echo ""
-    read -rp "$(echo -e ${PURPLE}${BOLD}"[SnowFox] Install $1? [y/N]: "${RESET})" choice
+    read -rp "$(echo -e ${PURPLE}${BOLD}"[SnowFox] Install $prompt_text? [y/N]: "${RESET})" choice
     [[ "$choice" =~ ^[yY]$ ]]
 }
 

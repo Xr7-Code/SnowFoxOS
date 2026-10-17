@@ -275,16 +275,16 @@ if [[ -f "$POLYBAR_CONF" ]]; then
 fi
 
 # ── modprobe configs ─────────────────────────────────────────
-if [[ -d "$SCRIPT_DIR/configs/modprobe" ]]; then
+# nvidia.conf only makes sense on systems with NVIDIA hardware —
+# on AMD-only/Intel-only machines it is misleading (blacklist
+# nouveau / options for a module that does not exist).
+if $HAS_NVIDIA; then
     if [[ -f "$SCRIPT_DIR/configs/modprobe/nvidia.conf" ]]; then
         cp "$SCRIPT_DIR/configs/modprobe/nvidia.conf" /etc/modprobe.d/nvidia.conf
     fi
-    update-initramfs -u 2>/dev/null || true
-    success "modprobe configs installed"
-fi
 
-if [[ ! -f /etc/modprobe.d/nvidia.conf ]]; then
-    cat > /etc/modprobe.d/nvidia.conf << 'EOF'
+    if [[ ! -f /etc/modprobe.d/nvidia.conf ]]; then
+        cat > /etc/modprobe.d/nvidia.conf << 'EOF'
 # SnowFoxOS — NVIDIA Configuration
 blacklist nouveau
 options nvidia NVreg_TemporaryFilePath=/var/tmp
@@ -294,7 +294,12 @@ options nvidia-drm modeset=1
 options nvidia NVreg_DynamicPowerManagement=0x00
 options nvidia NVreg_EnableGpuFirmware=0
 EOF
-    success "nvidia.conf written"
+    fi
+
+    update-initramfs -u 2>/dev/null || true
+    success "NVIDIA modprobe config installed"
+else
+    info "No NVIDIA GPU — nvidia.conf skipped"
 fi
 
 # ── Helper scripts ───────────────────────────────────────────

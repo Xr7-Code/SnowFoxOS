@@ -262,11 +262,12 @@ elif $HAS_AMD; then
 
 cat > /etc/modprobe.d/amdgpu.conf << 'EOF'
 # SnowFoxOS — AMD GPU Configuration
+# PSR/hybrid workarounds (dcfeaturemask, audio=0, runpm=0) are
+# applied on AMD+NVIDIA systems only — they can disable HDMI/DP
+# audio and GPU runtime power management on plain AMD hardware.
 options amdgpu bpc=8
-options amdgpu dc=1 dcfeaturemask=0x8
+options amdgpu dc=1
 options amdgpu dpm=1
-options amdgpu audio=0
-options amdgpu runpm=0
 EOF
     success "AMD stack installed"
 
