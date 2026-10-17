@@ -54,32 +54,7 @@ cmd_profile() {
     local CURRENT
     CURRENT=$(cat "$PROFILE_FILE" 2>/dev/null || echo "balanced")
 
-    local p="${1:-}"
-
-    # ── Gum TUI: interactive profile picker ──────────────────
-    if [[ -z "$p" ]] && sf_can_tui; then
-        sf_banner "Power Profile"
-        sf_note "Current: $CURRENT"
-        local choice st
-        choice=$(sf_choose "Choose a profile" 8 \
-            "⚖️   Balanced — default" \
-            "🚀  Performance — maximum CPU" \
-            "🔋  Battery — power saving" \
-            "🛡️   Privacy — radios off" \
-            "📊  Status — show details" \
-            "↩   Back")
-        st=$?
-        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
-        case "$choice" in
-            *Balanced*)    p="balanced" ;;
-            *Performance*) p="performance" ;;
-            *Battery*)     p="battery" ;;
-            *Privacy*)     p="privacy" ;;
-            *Status*)      p="status" ;;
-        esac
-    fi
-
-    case "$p" in
+    case "$1" in
         performance)
             echo "performance" > "$PROFILE_FILE"
             echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor &>/dev/null || true
@@ -125,7 +100,7 @@ cmd_profile() {
             echo ""
             ;;
         *)
-            err "Unknown profile: $p"
+            err "Unknown profile: $1"
             info "Available: balanced, performance, battery, privacy, status"
             exit 1
             ;;
@@ -136,8 +111,6 @@ cmd_profile() {
 # snowfox up — System update
 # ============================================================
 cmd_update() {
-    # "$1": "" = ask (Gum TUI or read) · 1|packages|apt · 2|all|full
-    local MODE="${1:-}"
     header "System Update"
 
     # Locate repo directory
@@ -155,42 +128,15 @@ cmd_update() {
 
     if [[ -z "$REPO_DIR" ]]; then
         warn "Repo directory not found."
-        if sf_can_tui; then
-            REPO_DIR=$(sf_ask "Path to SnowFoxOS repo" "$HOME/SnowFoxOS")
-        else
-            read -rp "$(echo -e ${PURPLE}${BOLD}"Path to SnowFoxOS repo: "${RESET})" REPO_DIR
-        fi
-        if [[ ! -d "$REPO_DIR/.git" ]]; then
-            err "No git repo found at: $REPO_DIR"
-            return 1
-        fi
+        read -rp "$(echo -e ${PURPLE}${BOLD}"Path to SnowFoxOS repo: "${RESET})" REPO_DIR
+        [[ ! -d "$REPO_DIR/.git" ]] && err "No git repo found at: $REPO_DIR" && exit 1
     fi
 
-    local CHOICE=""
-    case "$MODE" in
-        1|packages|apt)        CHOICE="1" ;;
-        2|all|full|everything) CHOICE="2" ;;
-    esac
-
-    if [[ -z "$CHOICE" ]]; then
-        if sf_can_tui; then
-            sf_note "Repo: $REPO_DIR"
-            local pick st
-            pick=$(sf_choose "What should be updated?" 5 \
-                "📦  Packages only (apt)" \
-                "🚀  Everything — repo + configs + CLI + packages (recommended)" \
-                "↩   Cancel")
-            st=$?
-            [[ $st -ne 0 || -z "$pick" || "$pick" == *Cancel* ]] && return 0
-            if [[ "$pick" == *"Packages only"* ]]; then CHOICE="1"; else CHOICE="2"; fi
-        else
-            echo ""
-            echo -e "  ${CYAN}1${RESET}) Packages only (apt)"
-            echo -e "  ${CYAN}2${RESET}) Everything — repo + configs + CLI + packages (recommended)"
-            echo ""
-            read -rp "$(echo -e ${PURPLE}${BOLD}"Choice [1-2]: "${RESET})" CHOICE
-        fi
-    fi
+    echo ""
+    echo -e "  ${CYAN}1${RESET}) Packages only (apt)"
+    echo -e "  ${CYAN}2${RESET}) Everything — repo + configs + CLI + packages (recommended)"
+    echo ""
+    read -rp "$(echo -e ${PURPLE}${BOLD}"Choice [1-2]: "${RESET})" CHOICE
 
     case "$CHOICE" in
         1)
@@ -295,7 +241,7 @@ cmd_update() {
             ;;
         *)
             err "Invalid choice."
-            return 1
+            exit 1
             ;;
     esac
 
@@ -310,30 +256,7 @@ cmd_node() {
     local CURRENT
     CURRENT=$(cat "$NODE_MODE_FILE" 2>/dev/null || echo "desktop")
 
-    local mode="${1:-}"
-
-    # ── Gum TUI: interactive mode picker ─────────────────────
-    if [[ -z "$mode" ]] && sf_can_tui; then
-        sf_banner "Node Mode"
-        sf_note "Current: $CURRENT"
-        local choice st
-        choice=$(sf_choose "Choose a system mode" 7 \
-            "🖥️   Desktop — i3 + polybar + rofi + dunst" \
-            "🗄️   Server — no X11, terminal only" \
-            "🕹️   Console — i3 + game launcher" \
-            "📊  Status — show current mode" \
-            "↩   Back")
-        st=$?
-        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
-        case "$choice" in
-            *Desktop*) mode="desktop" ;;
-            *Server*)  mode="server" ;;
-            *Console*) mode="console" ;;
-            *Status*)  mode="status" ;;
-        esac
-    fi
-
-    case "$mode" in
+    case "$1" in
         d|desktop) _node_desktop "$CURRENT" ;;
         s|server)  _node_server "$CURRENT" ;;
         c|console) _node_console "$CURRENT" ;;
@@ -458,7 +381,7 @@ _node_console() {
         err "Launcher not found: $LAUNCHER"
         info "Install with:"
         info "  git clone https://github.com/Xr7-Code/SnowFox-Console-Launcher.git ~/SnowFox-Console-Launcher"
-        return 1
+        exit 1
     fi
     [[ ! -x "$LAUNCHER" ]] && chmod +x "$LAUNCHER"
 
@@ -489,16 +412,7 @@ function_reset_system() {
     echo -e "\e[33mAre you absolutely sure? This cannot be undone!\e[0m"
     echo ""
 
-    if sf_can_tui; then
-        if ! sf_confirm "Continue with the factory reset?" "Continue" "Abort" no; then
-            echo ""
-            err "Reset cancelled. No changes were made."
-            return 1
-        fi
-        confirm=$(sf_input "Type YES in uppercase to confirm" "" "")
-    else
-        read -p "Type 'YES' in uppercase to continue: " confirm
-    fi
+    read -p "Type 'YES' in uppercase to continue: " confirm
 
     if [[ "$confirm" == "YES" ]]; then
         echo ""
@@ -557,6 +471,6 @@ function_reset_system() {
     else
         echo ""
         echo -e "\e[31m[-] Reset cancelled. No changes were made.\e[0m"
-        return 1
+        exit 1
     fi
 }

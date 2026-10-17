@@ -14,13 +14,12 @@ PREF_FILE="$MUSIC_CONFIG_DIR/music_source.txt"
 # Ensure config dir exists
 mkdir -p "$MUSIC_CONFIG_DIR"
 
-# ── SnowFox theme for Gum (shared in cli/gum.sh) ─────────────
-# Defaults keep this module usable if gum.sh was not sourced.
-: "${GUM_PURPLE:=#9d6fe8}"
-: "${GUM_PURPLE_LT:=#b899ff}"
-: "${GUM_RED:=#e87a7a}"
-: "${GUM_DIM:=#6e6a8a}"
-: "${GUM_FG:=#e0d9f5}"
+# ── SnowFox theme for Gum (matches Polybar / Kitty palette) ──
+GUM_PURPLE="#9d6fe8"
+GUM_PURPLE_LT="#b899ff"
+GUM_RED="#e87a7a"
+GUM_DIM="#6e6a8a"
+GUM_FG="#e0d9f5"
 
 # ============================================================
 #  Source preference
@@ -271,18 +270,45 @@ PYEOF
 #  Missing dependency: gum
 # ============================================================
 _music_gum_missing() {
-    # Delegates to the shared Gum library (cli/gum.sh)
-    if declare -F sf_gum_missing &>/dev/null; then
-        sf_gum_missing "the snowfox music TUI"
-        return 0
-    fi
+    local arch
+    case "$(uname -m)" in
+        x86_64|amd64)  arch="x86_64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        armv7l)        arch="armv7" ;;
+        armv6l)        arch="armv6" ;;
+        i386|i686)     arch="i386" ;;
+        *)             arch="x86_64" ;;
+    esac
 
-    # Standalone fallback (gum.sh not loaded)
+    local bin_cmd='    V=$(curl -fsSL https://api.github.com/repos/charmbracelet/gum/releases/latest | python3 -c "import sys,json;print(json.load(sys.stdin)[\"tag_name\"].lstrip(\"v\"))")
+    curl -fsSL "https://github.com/charmbracelet/gum/releases/download/v${V}/gum_${V}_Linux_ARCH.tar.gz" | sudo tar -xz -C /usr/local/bin --strip-components=1 --wildcards "gum_*/gum"'
+    bin_cmd="${bin_cmd//ARCH/$arch}"
+
     echo ""
     err "\"gum\" is not installed — it is required for the snowfox music TUI."
     echo ""
     echo -e "  ${BOLD}Install gum once, then run ${CYAN}snowfox music${RESET}${BOLD} again:${RESET}"
-    echo -e "  ${DGRAY}sudo apt install gum${RESET}   or   https://github.com/charmbracelet/gum#installation"
+    divider
+    echo ""
+    echo -e "  ${LPURPLE}${BOLD}Option 1 — Charm APT repository ${DGRAY}(recommended on SnowFoxOS / Debian)${RESET}"
+    echo -e "${DGRAY}"
+    cat <<'EOF'
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+    sudo apt update && sudo apt install gum
+EOF
+    echo -e "${RESET}"
+    echo -e "  ${LPURPLE}${BOLD}Option 2 — Prebuilt binary ${DGRAY}(no repository needed)${RESET}"
+    echo -e "${DGRAY}"
+    printf '%s\n' "$bin_cmd"
+    echo -e "${RESET}"
+    echo -e "  ${LPURPLE}${BOLD}Option 3 — Go ${DGRAY}(>= 1.21)${RESET}"
+    echo -e "  ${DGRAY}    go install charm.land/gum/v2@latest${RESET}"
+    echo ""
+    divider
+    info "More information: https://github.com/charmbracelet/gum#installation"
+    info "Fresh SnowFoxOS installs include gum automatically (install.sh)."
     echo ""
 }
 

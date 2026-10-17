@@ -5,16 +5,8 @@
 # ============================================================
 
 cmd_status() {
-    if [[ -z "${1:-}" ]] && sf_can_tui; then
-        _status_tui
-        return
-    fi
     header "System Status"
-    _status_report
-}
 
-# ── Plain report (shared by CLI and TUI) ─────────────────────
-_status_report() {
     # ── Uptime ───────────────────────────────────────────────
     local UPTIME
     UPTIME=$(uptime -p | sed 's/up //')
@@ -110,16 +102,8 @@ _status_report() {
 }
 
 cmd_battery() {
-    if [[ -z "${1:-}" ]] && sf_can_tui; then
-        _battery_tui
-        return
-    fi
     header "Battery Status"
-    _battery_report
-}
 
-# ── Plain report (shared by CLI and TUI) ─────────────────────
-_battery_report() {
     local BAT_PATH=""
     for p in /sys/class/power_supply/BAT*; do
         [[ -d "$p" ]] && BAT_PATH="$p" && break
@@ -128,7 +112,7 @@ _battery_report() {
     if [[ -z "$BAT_PATH" ]]; then
         warn "No battery found — desktop system?"
         echo ""
-        return 1
+        return
     fi
 
     local STATUS CAPACITY
@@ -222,51 +206,4 @@ _battery_report() {
     fi
 
     echo ""
-}
-
-# ============================================================
-#  Gum TUI — System Status & Battery
-# ============================================================
-_status_tui() {
-    while true; do
-        sf_banner "System Status"
-        _status_report
-
-        local choice st
-        choice=$(sf_choose "Actions" 5 \
-            "🔄  Refresh" \
-            "🔋  Battery details" \
-            "🩺  Doctor diagnostics" \
-            "↩   Back")
-        st=$?
-        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
-
-        case "$choice" in
-            *Battery*) cmd_battery ;;
-            *Doctor*)  cmd_doctor ;;
-        esac
-    done
-}
-
-_battery_tui() {
-    while true; do
-        sf_banner "Battery"
-        if ! _battery_report; then
-            sf_pause "Press Enter to go back…"
-            return 0
-        fi
-
-        local choice st
-        choice=$(sf_choose "Actions" 4 \
-            "🔄  Refresh" \
-            "📊  System status" \
-            "↩   Back")
-        st=$?
-        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
-
-        if [[ "$choice" == *"System status"* ]]; then
-            cmd_status
-            return 0
-        fi
-    done
 }

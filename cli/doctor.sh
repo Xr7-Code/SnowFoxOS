@@ -1,10 +1,10 @@
 #!/bin/bash
 # ============================================================
-#  snowfox doctor — System diagnostics
-#  _doctor_run prints the full report; cmd_doctor wraps it in a
-#  spinner + pager when running inside the Gum TUI.
+#  SnowFoxOS — CLI Module: System Diagnostics (Doctor)
+#  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
-_doctor_run() {
+
+cmd_doctor() {
     # Use temp files so counters survive subshells (pipelines, process substitutions)
     local _ISSUE_FILE _WARN_FILE
     _ISSUE_FILE=$(mktemp)
@@ -374,7 +374,7 @@ _doctor_run() {
     # Firewall
     if command -v ufw &>/dev/null || dpkg -l ufw &>/dev/null 2>&1; then
         local UFW_STATUS
-        UFW_STATUS=$(sudo -n ufw status 2>/dev/null | grep "Status:" | awk '{print $2}')
+        UFW_STATUS=$(sudo ufw status 2>/dev/null | grep "Status:" | awk '{print $2}')
         if [[ "$UFW_STATUS" == "active" ]]; then
             _doc_ok   "UFW firewall active"
         else
@@ -480,34 +480,4 @@ _doctor_run() {
         [[ "$WARNINGS" -gt 0 ]] && echo -e "  ${ORANGE}${BOLD}⚠ Warnings: ${WARNINGS}${RESET}"
     fi
     divider
-}
-
-# ── TUI wrapper: spinner + pager + summary ───────────────────
-cmd_doctor() {
-    if ! sf_can_tui; then
-        _doctor_run
-        return
-    fi
-
-    local tmp
-    tmp=$(mktemp)
-    sf_spin_do "Running system diagnostics…" _doctor_run "$tmp"
-    sf_page "Doctor" "$tmp"
-
-    # Summary from the captured report
-    local issues warnings
-    issues=$(grep -c "\[FAILED\]" "$tmp" 2>/dev/null || true)
-    warnings=$(grep -c "\[ WARN \]" "$tmp" 2>/dev/null || true)
-    issues="${issues:-0}"
-    warnings="${warnings:-0}"
-    rm -f "$tmp"
-
-    echo "" >&2
-    if [[ "$issues" -eq 0 && "$warnings" -eq 0 ]]; then
-        ok "System is in perfect condition."
-    else
-        [[ "$issues"   -gt 0 ]] && err  "Errors:   $issues"
-        [[ "$warnings" -gt 0 ]] && warn "Warnings: $warnings"
-    fi
-    sf_pause "Press Enter to return…"
 }

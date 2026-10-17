@@ -23,13 +23,10 @@ _SNAP_SOURCES=(
 cmd_snap() {
     case "$1" in
         save|s)     _snap_save "$2"    ;;
-        list|ls)    _snap_list         ;;
+        list|ls|"") _snap_list         ;;
         restore|r)  _snap_restore "$2" ;;
         diff|d)     _snap_diff "$2"    ;;
         delete|rm)  _snap_delete "$2"  ;;
-        "")
-            if sf_can_tui; then _snap_tui; else _snap_list; fi
-            ;;
         *)
             header "snowfox snap"
             info "  snowfox snap              — list snapshots"
@@ -42,8 +39,8 @@ cmd_snap() {
     esac
 }
 
-# ── Collect (shared by save + TUI; prints path and file count) ─
-_snap_collect() {
+# ── Save ─────────────────────────────────────────────────────
+_snap_save() {
     local label="${1:-$(date '+%Y%m%d_%H%M%S')}"
     # Sanitize label
     label=$(echo "$label" | tr -cs '[:alnum:]_-' '_' | head -c 48)
@@ -53,11 +50,12 @@ _snap_collect() {
     local snap_path="$SNAP_DIR/${id}_${label}"
     mkdir -p "$snap_path"
 
+    spin_start "Saving snapshot '$label'..."
+
     local count=0
-    local src dest
     for src in "${_SNAP_SOURCES[@]}"; do
         [[ -e "$src" ]] || continue
-        dest="$snap_path$(dirname "$src")/"
+        local dest="$snap_path$(dirname "$src")/"
         mkdir -p "$dest"
         cp -r "$src" "$dest" 2>/dev/null && ((count++))
     done
@@ -72,22 +70,7 @@ _snap_collect() {
         echo "profile=$(cat "$HOME/.config/snowfox/profile" 2>/dev/null || echo 'balanced')"
     } > "$snap_path/meta.conf"
 
-    echo "$snap_path"
-    echo "$count"
-}
-
-# ── Save ─────────────────────────────────────────────────────
-_snap_save() {
-    local label="${1:-$(date '+%Y%m%d_%H%M%S')}"
-
-    spin_start "Saving snapshot '$label'..."
-
-    local out snap_path count
-    out=$(_snap_collect "$label")
-    snap_path=$(echo "$out" | sed -n 1p)
-    count=$(echo "$out" | sed -n 2p)
-
-    spin_ok "Snapshot saved: ${BOLD}${snap_path##*/}${RESET}"
+    spin_ok "Snapshot saved: ${BOLD}${id}_${label}${RESET}"
     info "  $count config source(s) archived → $snap_path"
     echo ""
 }
@@ -125,38 +108,13 @@ _snap_list() {
     echo ""
 }
 
-# ── Apply (copy snapshot files back + reload desktop) ────────
-_snap_apply() {
-    local snap_path="$1"
-
-    # Auto-save current state first
-    _snap_collect "pre-restore" >/dev/null 2>&1
-
-    # Restore: strip snap_path prefix, copy to /
-    (cd "$snap_path" && find . -not -name 'meta.conf' -not -type d | while read -r rel; do
-        local dst="/${rel#./}"
-        mkdir -p "$(dirname "$dst")"
-        cp -r "$snap_path/$rel" "$dst" 2>/dev/null
-    done)
-
-    # Reload i3 + polybar if running
-    if pgrep -x i3 &>/dev/null; then
-        i3-msg reload &>/dev/null && ok "i3 reloaded"
-        if pgrep -x polybar &>/dev/null; then
-            pkill polybar; sleep 0.3
-            bash "$HOME/.config/polybar/launch.sh" &>/dev/null &
-            ok "Polybar restarted"
-        fi
-    fi
-}
-
 # ── Restore ──────────────────────────────────────────────────
 _snap_restore() {
     local target="$1"
     if [[ -z "$target" ]]; then
         err "Usage: snowfox snap restore <id>"
         info "  List snapshots: snowfox snap"
-        return 1
+        exit 1
     fi
 
     # Find snapshot directory (allow partial id match)
@@ -166,7 +124,7 @@ _snap_restore() {
     if [[ -z "$snap_path" ]] || [[ ! -f "$snap_path/meta.conf" ]]; then
         err "Snapshot not found: $target"
         info "  List snapshots: snowfox snap"
-        return 1
+        exit 1
     fi
 
     local label date
@@ -179,32 +137,37 @@ _snap_restore() {
     echo ""
 
     warn "This will overwrite your current configuration!"
-    if ! sf_yesno "Restore? A backup of the current config is saved first." "Restore" "Cancel" no; then
-        info "Cancelled."
-        return 0
-    fi
+    read -rp "$(echo -e "${ORANGE}${BOLD}Restore? [y/N]: ${RESET}")" CONFIRM
+    [[ ! "$CONFIRM" =~ ^[yY]$ ]] && { info "Cancelled."; return; }
+
+    # Auto-save current state first
+    info "Saving current config as backup..."
+    _snap_save "pre-restore" &>/dev/null
 
     spin_start "Restoring '$label'..."
-    _snap_apply "$snap_path" >/dev/null 2>&1
+
+    # Restore: strip snap_path prefix, copy to /
+    (cd "$snap_path" && find . -not -name 'meta.conf' -not -type d | while read -r rel; do
+        local dst="/${rel#./}"
+        mkdir -p "$(dirname "$dst")"
+        cp -r "$snap_path/$rel" "$dst" 2>/dev/null
+    done)
+
     spin_ok "Snapshot '$label' restored."
     echo ""
 
+    # Reload i3 + polybar if running
+    if pgrep -x i3 &>/dev/null; then
+        i3-msg reload &>/dev/null && ok "i3 reloaded"
+        if pgrep -x polybar &>/dev/null; then
+            pkill polybar; sleep 0.3
+            bash "$HOME/.config/polybar/launch.sh" &>/dev/null &
+            ok "Polybar restarted"
+        fi
+    fi
+
     info "Reopen your terminal to apply all changes."
     echo ""
-}
-
-# ── Diff report (prints changed files vs the live system) ────
-_snap_diff_text() {
-    local snap_path="$1"
-    (cd "$snap_path" && find . -not -name 'meta.conf' -not -type d | while read -r rel; do
-        local snap_file="$snap_path/$rel"
-        local live_file="/${rel#./}"
-        if [[ ! -f "$live_file" ]]; then
-            printf '  +new  %s\n' "${live_file}"
-            continue
-        fi
-        diff -q "$snap_file" "$live_file" &>/dev/null || printf '  ~mod  %s\n' "${live_file}"
-    done)
 }
 
 # ── Diff ─────────────────────────────────────────────────────
@@ -212,7 +175,7 @@ _snap_diff() {
     local target="$1"
     if [[ -z "$target" ]]; then
         err "Usage: snowfox snap diff <id>"
-        return 1
+        exit 1
     fi
 
     local snap_path
@@ -220,20 +183,25 @@ _snap_diff() {
 
     if [[ -z "$snap_path" ]] || [[ ! -f "$snap_path/meta.conf" ]]; then
         err "Snapshot not found: $target"
-        return 1
+        exit 1
     fi
 
     local label
     label=$(grep '^label=' "$snap_path/meta.conf" | cut -d= -f2-)
     header "Diff — $label vs current"
 
-    local report
-    report=$(_snap_diff_text "$snap_path")
-    if [[ -z "$report" ]]; then
-        ok "No differences found."
-    else
-        echo "$report"
-    fi
+    local changed=0
+    (cd "$snap_path" && find . -not -name 'meta.conf' -not -type d | while read -r rel; do
+        local snap_file="$snap_path/$rel"
+        local live_file="/${rel#./}"
+        [[ -f "$live_file" ]] || { printf "  ${RED}+new${RESET}  %s\n" "${live_file}"; return; }
+        if ! diff -q "$snap_file" "$live_file" &>/dev/null; then
+            printf "  ${ORANGE}~mod${RESET}  %s\n" "${live_file}"
+            ((changed++))
+        fi
+    done)
+
+    [[ $changed -eq 0 ]] && ok "No differences found."
     echo ""
 }
 
@@ -242,7 +210,7 @@ _snap_delete() {
     local target="$1"
     if [[ -z "$target" ]]; then
         err "Usage: snowfox snap delete <id>"
-        return 1
+        exit 1
     fi
 
     local snap_path
@@ -250,167 +218,16 @@ _snap_delete() {
 
     if [[ -z "$snap_path" ]]; then
         err "Snapshot not found: $target"
-        return 1
+        exit 1
     fi
 
     local label
     label=$(grep '^label=' "$snap_path/meta.conf" 2>/dev/null | cut -d= -f2-)
 
-    if ! sf_yesno "Delete snapshot '$label'?" "Delete" "Cancel" no; then
-        info "Cancelled."
-        return 0
-    fi
+    read -rp "$(echo -e "${RED}${BOLD}Delete '$label'? [y/N]: ${RESET}")" CONFIRM
+    [[ ! "$CONFIRM" =~ ^[yY]$ ]] && { info "Cancelled."; return; }
 
     rm -rf "$snap_path"
     ok "Snapshot '$label' deleted."
     echo ""
-}
-
-# ============================================================
-#  Gum TUI — Config Snapshots
-# ============================================================
-_snap_tui() {
-    while true; do
-        sf_banner "Snapshots"
-
-        local count=0
-        if [[ -d "$SNAP_DIR" ]]; then
-            count=$(find "$SNAP_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
-        fi
-        sf_note "$count snapshot(s) · $SNAP_DIR"
-
-        local choice st
-        choice=$(sf_choose "Config snapshots" 7 \
-            "💾  Create snapshot" \
-            "📋  Browse snapshots" \
-            "↩   Back")
-        st=$?
-        [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
-
-        case "$choice" in
-            *Create*) _snap_tui_create ;;
-            *Browse*) _snap_tui_list ;;
-        esac
-    done
-}
-
-_snap_tui_create() {
-    local label
-    label=$(sf_ask_ph "Snapshot label (optional)" "e.g. before-theme-change")
-    [[ -z "$label" ]] && label=$(date '+%Y%m%d_%H%M%S')
-
-    local tmp
-    tmp=$(mktemp)
-    sf_spin_do "Saving snapshot '$label'…" _snap_collect "$tmp" "$label"
-
-    local out snap_path count
-    out=$(cat "$tmp")
-    rm -f "$tmp"
-    snap_path=$(echo "$out" | sed -n 1p)
-    count=$(echo "$out" | sed -n 2p)
-
-    if [[ -n "$snap_path" && -f "$snap_path/meta.conf" ]]; then
-        ok "Snapshot saved: $(basename "$snap_path")"
-        info "  $count config source(s) archived."
-    else
-        err "Snapshot failed."
-        [[ -n "$out" ]] && info "  $out"
-    fi
-    echo ""
-    sf_pause
-}
-
-_snap_tui_list() {
-    if [[ ! -d "$SNAP_DIR" ]] || [[ -z "$(ls -A "$SNAP_DIR" 2>/dev/null)" ]]; then
-        sf_banner "Snapshots"
-        sf_note "No snapshots yet — create one first."
-        sleep 1.5
-        return 0
-    fi
-
-    local -a lines=()
-    local snap label id date profile
-    for snap in "$SNAP_DIR"/*/; do
-        [[ -f "$snap/meta.conf" ]] || continue
-        label=$(grep '^label=' "$snap/meta.conf" | cut -d= -f2-)
-        id=$(grep '^id=' "$snap/meta.conf" | cut -d= -f2-)
-        date=$(grep '^date=' "$snap/meta.conf" | cut -d= -f2-)
-        profile=$(grep '^profile=' "$snap/meta.conf" | cut -d= -f2-)
-        lines+=("$id  │  $label  │  $date  │  $profile")
-    done
-    [[ ${#lines[@]} -eq 0 ]] && return 0
-
-    local sel st
-    sel=$(printf '%s\n' "${lines[@]}" | sf_filter "Snapshots" "Type to filter · Enter for actions" 14)
-    st=$?
-    [[ $st -ne 0 || -z "$sel" ]] && return 0
-
-    local target
-    target=$(echo "$sel" | awk '{print $1}')
-
-    local snap_path="$SNAP_DIR/${target}"
-    [[ -d "$snap_path" ]] || snap_path=$(find "$SNAP_DIR" -maxdepth 1 -type d -name "${target}*" 2>/dev/null | head -1)
-    [[ -n "$snap_path" && -f "$snap_path/meta.conf" ]] && _snap_tui_manage "$snap_path"
-}
-
-_snap_tui_manage() {
-    local snap_path="$1"
-    local label date
-    label=$(grep '^label=' "$snap_path/meta.conf" | cut -d= -f2-)
-    date=$(grep '^date=' "$snap_path/meta.conf" | cut -d= -f2-)
-
-    sf_banner "Snapshot"
-    sf_note "$label · $date"
-
-    local choice st
-    choice=$(sf_choose "What would you like to do?" 8 \
-        "🔁  Restore this snapshot" \
-        "🔍  Diff against current" \
-        "🗑️   Delete snapshot" \
-        "↩   Back")
-    st=$?
-    [[ $st -ne 0 || -z "$choice" || "$choice" == *Back* ]] && return 0
-
-    case "$choice" in
-        *Restore*)
-            sf_yesno "Restore '$label'? Current config is backed up first." "Restore" "Cancel" no || return 0
-
-            local tmp
-            tmp=$(mktemp)
-            sf_spin_do "Restoring '$label'…" _snap_apply "$tmp" "$snap_path"
-            rm -f "$tmp"
-
-            ok "Snapshot '$label' restored."
-            info "  Reopen your terminal to apply all changes."
-            echo ""
-            sf_pause
-            ;;
-        *Diff*)
-            local tmp
-            tmp=$(mktemp)
-            {
-                echo "Snapshot : $label"
-                echo "Saved    : $date"
-                echo ""
-                divider
-                echo ""
-                local report
-                report=$(_snap_diff_text "$snap_path")
-                if [[ -z "$report" ]]; then
-                    echo "  ✓  No differences found."
-                else
-                    echo "$report"
-                fi
-            } > "$tmp"
-            sf_page "Diff — $label" "$tmp"
-            rm -f "$tmp"
-            ;;
-        *Delete*)
-            if sf_yesno "Delete snapshot '$label'?" "Delete" "Cancel" no; then
-                rm -rf "$snap_path"
-                ok "Snapshot '$label' deleted."
-                sleep 1
-            fi
-            ;;
-    esac
 }
