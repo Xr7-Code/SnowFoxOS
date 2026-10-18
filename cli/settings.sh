@@ -110,6 +110,13 @@ cmd_settings_overview() {
     bool_row "Autostart on boot" "$([[ "$boot_state" == "on" ]] && echo true || echo false)" "on" "off"
     hint "Change: snowfox bt <on|off|toggle|boot-on|boot-off>"
 
+    # ── Appearance ───────────────────────────────────────────
+    section "Appearance"
+    local cur_theme="snowfox"
+    [[ -f "$CONFIG_DIR/theme" ]] && cur_theme="$(head -n1 "$CONFIG_DIR/theme" | tr -d '[:space:]')"
+    row "Color theme" "${cur_theme:-snowfox}"
+    hint "Change: snowfox theme <name>  ·  Picker: snowfox theme gui"
+
     # ── User ─────────────────────────────────────────────────
     section "User"
     row "Current user" "$USER"
@@ -143,8 +150,8 @@ cmd_settings_gui() {
     while true; do
         local CHOICE
         CHOICE=$(echo -e \
-            "  Default Applications\n  Keyboard Layout\n  System Language\n  Timezone\n  Bluetooth\n  User Management\n  ─────────────────────────────\n  Back" \
-            | rofi -dmenu -p "🦊 Settings" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 420 -lines 10)
+            "  Default Applications\n  Keyboard Layout\n  System Language\n  Timezone\n  Bluetooth\n  Color Theme\n  User Management\n  ─────────────────────────────\n  Back" \
+            | rofi -dmenu -p "🦊 Settings" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 420 -lines 11)
 
         [[ -z "$CHOICE" ]] && exit 0
 
@@ -154,6 +161,7 @@ cmd_settings_gui() {
             *"System Language"*)      _gui_language ;;
             *"Timezone"*)             _gui_timezone ;;
             *"Bluetooth"*)            _gui_bluetooth ;;
+            *"Color Theme"*)          cmd_theme_gui ;;
             *"User Management"*)      _gui_user ;;
             *"Back"*)                 exit 0 ;;
         esac

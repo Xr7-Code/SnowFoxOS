@@ -2,11 +2,13 @@
 # ============================================================
 #  SnowFoxOS — Polybar Bluetooth Status & Toggle Script
 #  Path: ~/.config/polybar/scripts/bluetooth.sh
+#  Colors are palette tokens — rendered from
+#  ~/.config/snowfox/palette.conf (snowfox theme color)
 # ============================================================
 
 COLOR_CYAN="%{F#89dceb}"
-COLOR_GREEN="%{F#a6e3a1}"
-COLOR_DIM="%{F#7f849c}"
+COLOR_GREEN="%{F#89c98a}"
+COLOR_DIM="%{F#6e6a8a}"
 RESET="%{F-}"
 
 # ── 1. Toggle logic (triggered on bar click) ─────────────────

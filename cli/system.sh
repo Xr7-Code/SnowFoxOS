@@ -214,12 +214,31 @@ cmd_update() {
             if [[ -d "$REPO_DIR/configs" ]]; then
                 cp -r "$REPO_DIR/configs/"* "$HOME/.config/"
                 ok "Configs updated"
-                i3-msg reload &>/dev/null && ok "i3 reloaded"
-                if pgrep -x polybar &>/dev/null; then
-                    pkill polybar
-                    sleep 0.5
-                    bash "$HOME/.config/polybar/launch.sh" &
-                    ok "Polybar restarted"
+
+                # Re-apply the user's saved color theme on top of the
+                # fresh configs (they ship in the default theme).
+                local theme_applied="false"
+                if [[ -f "$HOME/.config/snowfox/theme" ]]; then
+                    local saved_theme
+                    saved_theme="$(head -n1 "$HOME/.config/snowfox/theme" | tr -d '[:space:]')"
+                    if [[ -n "$saved_theme" ]] && command -v snowfox &>/dev/null; then
+                        if snowfox theme apply "$saved_theme" &>/dev/null; then
+                            ok "Color theme re-applied ($saved_theme)"
+                            theme_applied="true"
+                        else
+                            warn "Color theme could not be re-applied ($saved_theme)"
+                        fi
+                    fi
+                fi
+
+                if [[ "$theme_applied" != "true" ]]; then
+                    i3-msg reload &>/dev/null && ok "i3 reloaded"
+                    if pgrep -x polybar &>/dev/null; then
+                        pkill polybar
+                        sleep 0.5
+                        bash "$HOME/.config/polybar/launch.sh" &
+                        ok "Polybar restarted"
+                    fi
                 fi
             fi
 

@@ -5,25 +5,27 @@
 set $mod Mod4
 set $term kitty
 
-# ── Colors ──────────────────────────────────────────────────
-set $purple    #9d6fe8
-set $purple_lt #b899ff
+# ── Colors (rendered from ~/.config/snowfox/palette.conf) ───
+#    Switch themes with:  snowfox theme <name>
+set $accent    #9d6fe8
+set $accent_lt #b899ff
 set $bg        #1a1825
 set $bg2       #201e2e
 set $fg        #e0d9f5
 set $gray      #6e6a8a
-set $orange    #ff79c6
+set $pink      #ff79c6
+set $on_accent #ffffff
 
 # ── Font ────────────────────────────────────────────────────
 font pango:JetBrainsMono Nerd Font 10
 
 # ── Window Decoration ───────────────────────────────────────
 # Tiling: no border, no title — clean
-# Floating: slim title bar to grab + purple border
-client.focused          $purple   $purple   $fg     $purple_lt $purple
+# Floating: slim title bar to grab + accent border
+client.focused          $accent   $accent   $on_accent $accent_lt $accent
 client.focused_inactive $bg2      $bg       $gray   $bg2       $bg2
 client.unfocused        $bg2      $bg       $gray   $bg2       $bg2
-client.urgent           $orange   $bg2      $fg     $orange    $orange
+client.urgent           $pink     $bg2      $on_accent $pink    $pink
 
 default_border none
 default_floating_border normal 2

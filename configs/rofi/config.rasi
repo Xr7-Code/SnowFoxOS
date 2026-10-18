@@ -15,24 +15,34 @@ configuration {
 
 * {
     font:             "JetBrainsMono Nerd Font 10.5";
-    bg:        #1a1825;
-    bg-alt:    #201e2e;
-    bg-hover:         #313244;
-    fg:               #cdd6f4;
-    fg-alt:           #6c7086;
-    purple:    #9d6fe8;
-    purple-lt: #b899ff;
-    purple-dim:       rgba(129, 57, 232, 0.18);
-    purple-border:    rgba(163, 102, 255, 0.5);
-    orange:           #ff79c6;
+
+    /* Palette — rendered from ~/.config/snowfox/palette.conf.
+       Switch themes with:  snowfox theme <name>          */
+    bg:               #1a1825;
+    bg-alt:           #201e2e;
+    bg-hover:         #332f50;
+    fg:               #e0d9f5;
+    fg-alt:           #6e6a8a;
+    on-accent:        #ffffff;
+
+    accent:           #9d6fe8;
+    accent-lt:        #b899ff;
+
+    window-bg:        rgba(26, 24, 37, 0.85);
+    panel-bg:         rgba(32, 30, 46, 0.80);
+    hover-bg:         rgba(129, 57, 232, 0.18);
+    sel-bg:           rgba(129, 57, 232, 0.25);
+    panel-border:     rgba(129, 57, 232, 0.30);
+    border-glow:      rgba(184, 153, 255, 0.50);
+
     background-color: transparent;
     text-color:       @fg;
 }
 
 window {
-    background-color: rgba(26, 24, 37, 0.85);
+    background-color: @window-bg;
     border:           1.5px solid;
-    border-color:     @purple-border;
+    border-color:     @border-glow;
     border-radius:    14px;
     width:            520px;
     padding:          14px;
@@ -49,10 +59,10 @@ mainbox {
 
 /* ── Search bar ─────────────────────────────────────────── */
 inputbar {
-    background-color: rgba(32, 30, 46, 0.80);
+    background-color: @panel-bg;
     border-radius:    10px;
     border:           1px solid;
-    border-color:     rgba(129, 57, 232, 0.25);
+    border-color:     @panel-border;
     padding:          10px 14px;
     spacing:          10px;
     children:         [prompt, entry];
@@ -60,7 +70,7 @@ inputbar {
 
 prompt {
     background-color: transparent;
-    text-color:       @purple-lt;
+    text-color:       @accent-lt;
     font:             "JetBrainsMono Nerd Font Bold 12";
 }
 
@@ -83,7 +93,7 @@ listview {
 }
 
 element {
-    background-color: rgba(32, 30, 46, 0.80);
+    background-color: @panel-bg;
     border-radius:    8px;
     padding:          8px 12px;
     spacing:          12px;
@@ -97,20 +107,20 @@ element normal normal {
 }
 
 element normal active {
-    background-color: @purple-dim;
-    text-color:       @purple-lt;
+    background-color: @hover-bg;
+    text-color:       @accent-lt;
 }
 
 element selected normal {
-    background-color: @purple-dim;
+    background-color: @sel-bg;
     border:           1px solid;
-    border-color:     @purple-border;
-    text-color:       #ffffff;
+    border-color:     @border-glow;
+    text-color:       @on-accent;
 }
 
 element selected active {
-    background-color: @purple-dim;
-    text-color:       @purple-lt;
+    background-color: @sel-bg;
+    text-color:       @on-accent;
 }
 
 element alternate normal {
@@ -130,7 +140,7 @@ element-text {
 
 scrollbar {
     background-color: @bg-alt;
-    handle-color:     @purple-dim;
+    handle-color:     @fg-alt;
     border-radius:    4px;
     width:            4px;
 }

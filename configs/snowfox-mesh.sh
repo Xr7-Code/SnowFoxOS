@@ -417,19 +417,20 @@ except OSError:
     <title>🦊 SnowFox Mesh</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, sans-serif; background: #0d0d1a; color: #e4e4e7; padding: 16px; }
-        .chat { max-width: 600px; margin: 0 auto; background: #1a1a2e; border-radius: 16px; padding: 16px; height: 90vh; display: flex; flex-direction: column; }
-        h1 { color: #bc95ff; font-size: 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-        .status-badge { font-size: 12px; background: #2a2a44; padding: 2px 10px; border-radius: 12px; color: #4ade80; }
-        #messages { flex: 1; overflow-y: auto; padding: 8px; background: #12121f; border-radius: 8px; margin-bottom: 12px; }
-        .msg { padding: 6px 0; border-bottom: 1px solid #1f1f33; }
-        .sender { color: #bc95ff; font-weight: bold; }
+        /* Palette — rendered from ~/.config/snowfox/palette.conf */
+        body { font-family: -apple-system, sans-serif; background: #1a1825; color: #e0d9f5; padding: 16px; }
+        .chat { max-width: 600px; margin: 0 auto; background: #201e2e; border-radius: 16px; padding: 16px; height: 90vh; display: flex; flex-direction: column; }
+        h1 { color: #b899ff; font-size: 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .status-badge { font-size: 12px; background: #2a2840; padding: 2px 10px; border-radius: 12px; color: #89c98a; }
+        #messages { flex: 1; overflow-y: auto; padding: 8px; background: #11111b; border-radius: 8px; margin-bottom: 12px; }
+        .msg { padding: 6px 0; border-bottom: 1px solid #2a2840; }
+        .sender { color: #b899ff; font-weight: bold; }
         .own { color: #89dceb; }
-        .time { color: #555; font-size: 11px; margin-left: 8px; }
+        .time { color: #4a4760; font-size: 11px; margin-left: 8px; }
         .input-row { display: flex; gap: 8px; }
-        .input-row input { flex: 1; padding: 10px; border-radius: 8px; border: none; background: #2a2a44; color: white; font-size: 16px; }
-        .input-row button { padding: 10px 20px; border-radius: 8px; border: none; background: #bc95ff; color: #0d0d1a; font-weight: bold; font-size: 16px; cursor: pointer; }
-        .status { color: #4ade80; font-size: 12px; margin-top: 8px; text-align: center; }
+        .input-row input { flex: 1; padding: 10px; border-radius: 8px; border: none; background: #2a2840; color: #e0d9f5; font-size: 16px; }
+        .input-row button { padding: 10px 20px; border-radius: 8px; border: none; background: #b899ff; color: #1a1825; font-weight: bold; font-size: 16px; cursor: pointer; }
+        .status { color: #89c98a; font-size: 12px; margin-top: 8px; text-align: center; }
     </style>
 </head>
 <body>

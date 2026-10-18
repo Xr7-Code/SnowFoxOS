@@ -79,6 +79,16 @@ cmd_help() {
     _help_cmd "snowfox def [set] <key> <val>"    "Default applications"
     echo ""
 
+    _help_section "Appearance — Color Themes"
+    _help_cmd "snowfox theme"                    "Current theme & available palettes"
+    _help_cmd "snowfox theme <name>"             "Switch: snowfox · blackwhite · whiteblack"
+    _help_cmd "snowfox theme show [name]"        "Preview all colors of a theme"
+    _help_cmd "snowfox theme gui"                "Theme picker (Rofi menu)"
+    _help_cmd "snowfox theme color <token>"      "Print a single color value (for scripts)"
+    _help_cmd "snowfox theme reset"              "Back to the default theme"
+    _help_cmd "snowfox theme check"              "Validate palette & desktop configs"
+    echo ""
+
     _help_section "Snapshots"
     _help_cmd "snowfox snap"                     "List config snapshots"
     _help_cmd "snowfox snap save [name]"         "Save current config (i3, polybar, kitty, …)"

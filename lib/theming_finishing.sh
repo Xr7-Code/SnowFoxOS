@@ -404,6 +404,22 @@ if [[ -f "$SCRIPT_DIR/snowfox" ]]; then
     fi
 fi
 
+# ── Re-apply previously selected color theme ─────────────────
+# On reinstall/upgrade the repo configs (shipped in the default
+# theme) were just copied over — restore the user's saved theme.
+if [[ -f "$CONFIG_DIR/snowfox/theme" ]]; then
+    SAVED_THEME="$(head -n1 "$CONFIG_DIR/snowfox/theme" | tr -d '[:space:]')"
+    if [[ -n "$SAVED_THEME" ]]; then
+        info "Re-applying saved color theme: $SAVED_THEME"
+        sudo -u "$TARGET_USER" env HOME="$TARGET_HOME" \
+            XDG_CONFIG_HOME="$TARGET_HOME/.config" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$TARGET_USER")/bus" \
+            /usr/local/bin/snowfox theme apply "$SAVED_THEME" &>/dev/null \
+            && success "Color theme re-applied: $SAVED_THEME" \
+            || warn "Could not re-apply color theme"
+    fi
+fi
+
 [[ -f "$SCRIPT_DIR/snowfox-greeting.sh" ]] && \
     cp "$SCRIPT_DIR/snowfox-greeting.sh" /usr/local/bin/snowfox-greeting && \
     chmod +x /usr/local/bin/snowfox-greeting

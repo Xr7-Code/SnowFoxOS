@@ -96,15 +96,13 @@ success "yt-dlp installed"
 apt-get install -y nodejs 2>/dev/null || true
 success "Node.js installed (JS runtime for yt-dlp)"
 
-# ── gum — Charm TUI toolkit for the snowfox CLI ──────────────
-# Powers the control center ("snowfox") and every command TUI
-# (music, stash, settings, network, snapshots, AI, …).
+# ── gum — Charm TUI toolkit for "snowfox music" ──────────────
 # Debian 12 has no gum package, so fall back to the official
 # prebuilt binary from GitHub releases (arch-aware).
 if command -v gum &>/dev/null; then
     info "gum already installed"
 else
-    info "Installing gum (TUI toolkit for the snowfox CLI)..."
+    info "Installing gum (TUI toolkit for snowfox music)..."
     GUM_OK="false"
     if apt-get install -y gum 2>/dev/null; then
         GUM_OK="true"
@@ -130,7 +128,7 @@ else
     if [[ "$GUM_OK" == "true" ]]; then
         success "gum installed"
     else
-        warn "gum could not be installed — snowfox TUIs will show manual instructions"
+        warn "gum could not be installed — 'snowfox music' will show manual instructions"
     fi
 fi
 

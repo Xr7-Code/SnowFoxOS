@@ -71,37 +71,41 @@ success "PipeWire + Bluetooth audio installed (A2DP, HFP, HSP)"
 # ── Kitty Terminal Configuration ─────────────────────────────
 info "Configuring Kitty terminal..."
 mkdir -p "$TARGET_HOME/.config/kitty"
+# NOTE: Step 10 (theming_finishing.sh) installs the canonical
+# configs/kitty/kitty.conf, which is rendered from the master
+# palette (~/.config/snowfox/palette.conf). This heredoc is only
+# the fallback for partial installs and uses the same colors.
 cat > "$TARGET_HOME/.config/kitty/kitty.conf" << 'KITTYEOF'
 # SnowFox Kitty Theme
 background #11111b
-foreground #cdd6f4
+foreground #e0d9f5
 window_padding_width 8
 
 # Cursor
-cursor            #8139e8
-cursor_text_color #11111b
+cursor            #9d6fe8
+cursor_text_color #ffffff
 
 # Selection
 selection_background #8139e8
 selection_foreground #ffffff
 
-# Colors (matching the SnowFox palette)
+# Colors (SnowFox palette tokens)
 color0  #1e1e2e
-color1  #e05555
-color2  #5faf5f
-color3  #ff9f5e
-color4  #8139e8
-color5  #9b5ef0
-color6  #89dceb
-color7  #cdd6f4
-color8  #6c7086
-color9  #e05555
-color10 #5faf5f
-color11 #ff9f5e
-color12 #8139e8
-color13 #9b5ef0
+color1  #e87a7a
+color2  #89c98a
+color3  #e8c97a
+color4  #9d6fe8
+color5  #b899ff
+color6  #7acfe8
+color7  #e0d9f5
+color8  #6e6a8a
+color9  #e87a7a
+color10 #89c98a
+color11 #e8c97a
+color12 #9d6fe8
+color13 #b899ff
 color14 #89dceb
-color15 #ffffff
+color15 #f7f7fb
 
 # Font
 font_family      JetBrainsMono Nerd Font
