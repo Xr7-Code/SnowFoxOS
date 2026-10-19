@@ -112,10 +112,10 @@ cmd_settings_overview() {
 
     # ── Audio ────────────────────────────────────────────────
     section "Audio"
-    local imm_state="false" imm_prof="brain"
+    local imm_state="false" imm_prof="inhead"
     if declare -F _imm_enabled &>/dev/null; then
         imm_state="$(_imm_enabled)"
-        imm_prof="$(_imm_get IMMERSION_PROFILE brain)"
+        imm_prof="$(_imm_get IMMERSION_PROFILE inhead)"
     fi
     if [[ "$imm_state" == "true" ]]; then
         bool_row "Immersion" true "on · profile: $imm_prof"
@@ -279,13 +279,13 @@ _gui_bluetooth() {
 
 _gui_immersion() {
     local ROFI_THEME="$HOME/.config/rofi/config.rasi"
-    local state="false" prof="brain"
+    local state="false" prof="inhead"
     declare -F _imm_enabled &>/dev/null && state="$(_imm_enabled)"
-    declare -F _imm_get &>/dev/null && prof="$(_imm_get IMMERSION_PROFILE brain)"
+    declare -F _imm_get &>/dev/null && prof="$(_imm_get IMMERSION_PROFILE inhead)"
 
     local CHOICE
-    CHOICE=$(echo -e "  Turn on\n  Turn off\n  Profile: head — out of your head\n  Profile: body — feel the bass\n  Profile: mind — binaural focus\n  Profile: brain — inside your head + room\n  Profile: total — everything\n  ─────────────────────────────\n  Test: chain (16 s)\n  Test: channels (left/right)\n  Test: beats (30 s)\n  ─────────────────────────────\n  Back" \
-        | rofi -dmenu -p "🦊 Immersion ($state · $prof)" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 460 -lines 14)
+    CHOICE=$(echo -e "  Turn on\n  Turn off\n  ─────────────────────────────\n  Stage: in your head (inhead)\n  Stage: all around you (3D)\n  Profile: head — out of your head\n  Profile: body — physical bass\n  Profile: mind — binaural focus\n  Profile: total — everything\n  ─────────────────────────────\n  Test: chain (16 s)\n  Test: channels (left/right)\n  Test: beats (30 s)\n  ─────────────────────────────\n  Back" \
+        | rofi -dmenu -p "🦊 Immersion ($state · $prof)" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 460 -lines 15)
 
     [[ -z "$CHOICE" || "$CHOICE" == *"Back"* ]] && return
 
@@ -300,20 +300,23 @@ _gui_immersion() {
             _imm_set IMMERSION_ENABLED false
             _imm_beats_stop
             notify-send "🦊 SnowFox" "Immersion mode OFF" 2>/dev/null || true ;;
+        *"Stage: in your head"*)
+            ( cmd_immersion stage inhead ) >/dev/null 2>&1
+            notify-send "🦊 SnowFox" "Immersion stage: in your head" 2>/dev/null || true ;;
+        *"Stage: all around"*)
+            ( cmd_immersion stage 3d ) >/dev/null 2>&1
+            notify-send "🦊 SnowFox" "Immersion stage: all around you (3D)" 2>/dev/null || true ;;
         *"Profile: head"*)
-            _imm_profile_apply head && _imm_sync_all
+            _imm_profile_apply head && _imm_sync_all && _imm_beats_reconcile
             notify-send "🦊 SnowFox" "Immersion profile: head" 2>/dev/null || true ;;
         *"Profile: body"*)
-            _imm_profile_apply body && _imm_sync_all
+            _imm_profile_apply body && _imm_sync_all && _imm_beats_reconcile
             notify-send "🦊 SnowFox" "Immersion profile: body" 2>/dev/null || true ;;
         *"Profile: mind"*)
-            _imm_profile_apply mind && _imm_sync_all
+            _imm_profile_apply mind && _imm_sync_all && _imm_beats_reconcile
             notify-send "🦊 SnowFox" "Immersion profile: mind" 2>/dev/null || true ;;
-        *"Profile: brain"*)
-            _imm_profile_apply brain && _imm_sync_all
-            notify-send "🦊 SnowFox" "Immersion profile: brain" 2>/dev/null || true ;;
         *"Profile: total"*)
-            _imm_profile_apply total && _imm_sync_all
+            _imm_profile_apply total && _imm_sync_all && _imm_beats_reconcile
             notify-send "🦊 SnowFox" "Immersion profile: total" 2>/dev/null || true ;;
         *"Test: chain"*)
             ( cmd_immersion test ) ;;

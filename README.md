@@ -206,7 +206,7 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 - **picom** — compositor with rounded corners and soft shadows (fading disabled for stability)
 - **Zen Browser** — privacy-focused browser based on Firefox (optional)
 - **PipeWire** — modern audio stack with WirePlumber
-- **Immersion Mode** — `snowfox immersion on` turns listening into a physical experience: in-head super stereo, a side-only room with slow 8D rotation, headphone crossfeed, clean body bass and a binaural-beat brain layer — all real-time, local DSP in mpv (no re-encoding)
+- **Immersion Mode** — `snowfox immersion on` turns listening into a physical experience: two neutral spatial stages (`inhead` = inside your head, `3d` = all around you), diffuse side-only room, headphone crossfeed, optional clean body bass and a binaural-beat brain layer — all real-time, local DSP in mpv (no re-encoding)
 - **Dunst** — notification daemon, tuned to the SnowFox palette
 - **Clip-Saver** — keeps clipboard contents active even after closing the source window (`clipnotify` + `xclip`, no history bloat)
 - **Flameshot** — screenshot tool with area selection and annotation (replaces GIMP for the standard workflow)
@@ -275,34 +275,42 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 
 ### Immersion Mode — Deep Listening
 
-`snowfox immersion on` activates a real-time DSP chain for everything SnowFox plays (`snowfox music`, `snowfox stream`). Six stages, each aimed at a different part of the experience:
+`snowfox immersion on` activates a real-time DSP chain for everything SnowFox plays (`snowfox music`, `snowfox stream`). It is split into a **tonal** layer and a **spatial** layer; the two neutral stages leave the tone completely flat and use only the spatial part.
 
-| Stage | Technology | What it does |
+| Layer | Technology | What it does |
 |---|---|---|
-| **Body** | 28 Hz high-pass + 50 Hz low shelf + 95 Hz punch | Keeps sub-rumble out, lifts the chest/body range and adds kick punch — clean, without the dull boom |
-| **Clarity** | 280 Hz cut + 3.2 kHz lift | Removes the mud that makes bass sound dull and adds presence so the music stays clear |
-| **Space (in-head)** | Mid/side super stereo | Raises the side signal without touching the centre — the stage that pins music *inside* the head (`tune space`) |
-| **Room / spin** | Side-only early reflections | A 10 ms delayed, 180 Hz–9 kHz side copy widens the stage; a slow 0.08 Hz rotation moves the room around your head (`tune room`, `tune spin`) |
-| **Head (out-of-head)** | Bauer/bs2b-style crossfeed | Mixes a delayed, low-passed part of L into R and vice versa — the band steps out of your skull and long sessions stop hurting; the `brain` profile turns it off |
-| **Brain** | Two pure tones, one per ear | The difference frequency (e.g. 395 Hz left / 405 Hz right) is not in the air — the brainstem creates the beat; ~400 Hz is the easiest carrier to perceive |
+| **Space (in-head)** | Mid/side super stereo | Raises the side signal without touching the centre — pins music *inside* the head (`tune space`) |
+| **Room / spin (3D)** | Three side-only early reflections | 11/19, 23/37 and 41/59 ms taps, 200 Hz–14/10/8 kHz, plus a 0.05 Hz rotation: a diffuse room around your head (`tune room`, `tune spin`) |
+| **Head (out-of-head)** | Bauer/bs2b-style crossfeed | Mixes a delayed, low-passed part of L into R and vice versa — the band steps out of your skull (`head`, `3d`) |
+| **Brain (optional)** | Two pure tones, one per ear | 395 Hz left / 405 Hz right = 10 Hz alpha beat, created in the brainstem; off in the neutral stages, enable with `tune beats on` |
+| **Body (optional)** | 28 Hz high-pass + 50 Hz shelf + 95 Hz punch | Chest bass and kick punch, **only** when `tune bass > 0` |
+| **Clarity (optional)** | 280 Hz cut + 3.2 kHz lift | Removes mud and adds presence — part of the body EQ, off in the neutral stages |
 
-Profiles: **head** (crossfeed only) · **body** (physical bass + room) · **mind** (beats, gentle) · **brain** (in-head + room: super stereo, slow rotation, beats, no crossfeed — **default**) · **total** (everything).
+**Two stages, one switch:**
+- `inhead` — *in your head*: super stereo only, no crossfeed, no room, flat tone.
+- `3d` — *all around you*: strong diffuse reflections, crossfeed and slow rotation, flat tone.
+
+Both sound like normal music — no shelf, no cuts, no added tones. The old `brain` profile name is an alias for `inhead`.
+
+Profiles: **head** (crossfeed only) · **inhead** (in-head — **default**) · **3d** (all around) · **body** (physical bass + room) · **mind** (binaural focus) · **total** (everything).
 
 ```bash
-snowfox immersion on               # enable with the current profile
-snowfox immersion on brain         # enable + choose a profile (default: in-head + room)
+snowfox immersion on               # enable with the current stage/profile
+snowfox immersion stage inhead     # in your head (flat tone, no added tones)
+snowfox immersion stage 3d         # all around you (flat tone, no added tones)
+snowfox immersion on 3d            # enable + choose a profile in one step
 snowfox immersion status           # state, chain, output, beat layer
 snowfox immersion test             # 16 s chain test with live left/right/bass labels
 snowfox immersion test raw         # same signal without processing (A/B)
 snowfox immersion test channels    # raw channel check: left 440 Hz, right 880 Hz
 snowfox immersion test beats       # 30 s beat layer only
-snowfox immersion tune space 1.55  # fine-tune crossfeed, bass, vb, space, room, spin, trim, beats
+snowfox immersion tune room 0.55   # fine-tune crossfeed, bass, vb, space, room, spin, trim, beats
 snowfox immersion about            # the science, briefly
 ```
 
-The beat frequency follows the classic EEG bands: **delta** 2.5 Hz (deep sleep), **theta** 6 Hz (drifting), **alpha** 10 Hz (calm focus), **SMR** 13.5 Hz, **beta** 18 Hz (alert), **gamma** 40 Hz (high attention). Default: **400 Hz carrier**, 10 Hz difference, amplitude 0.03 — made for long sessions.
+The beat layer is optional and **off in `inhead`/`3d`**. Enable it with `tune beats on` (or use the `mind` profile). The beat frequency follows the classic EEG bands: **delta** 2.5 Hz (deep sleep), **theta** 6 Hz (drifting), **alpha** 10 Hz (calm focus), **SMR** 13.5 Hz, **beta** 18 Hz (alert), **gamma** 40 Hz (high attention). Default: **400 Hz carrier**, 10 Hz difference, amplitude 0.03 — made for long sessions.
 
-**If something sounds off:** `tune bass 4` softens the body · `tune room 0.15` calms the space · `tune room 0.3` + `tune spin 0.5` pushes the 8D effect · `tune space 1.7` pushes the in-head stage · `tune space 1.3` tames hiss · `tune trim -5` adds limiter headroom · `tune beatvol 0.02` softens the beat · `tune vb 1.5` adds harmonic sub-bass (off by default — can sound fuzzy). Each profile carries its own headroom trim, so the limiter stays transparent on loud masters.
+**If something sounds off:** switch back to the neutral stage: `snowfox immersion stage inhead` · `tune room 0.3` calms the space · `tune room 0.8` + `tune spin 0.6` pushes the 3D effect · `tune space 1.4` pushes the in-head stage · `tune space 1.2` tames hiss · `tune trim -4` adds limiter headroom · `tune beatvol 0.02` softens the beat · `tune bass 3` adds a little body to a neutral stage · `tune vb 1.5` adds harmonic sub-bass (off by default — can sound fuzzy). Each profile carries its own headroom trim, so the limiter stays transparent on loud masters.
 
 > **Channel check:** the DSP is channel-correct — `snowfox immersion test channels` plays raw hard-panned tones. If the left tone is silent, check the cable/driver; if the sides are swapped, check the cups or the PipeWire channel map.
 

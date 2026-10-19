@@ -57,7 +57,7 @@ _snowfox_complete() {
         music|m)
             COMPREPLY=(); return ;;
         immersion|imm)
-            COMPREPLY=( $(compgen -W "on off toggle status profiles profile tune beats test mpv show reset doctor about help head body mind brain total alpha theta delta beta gamma space room spin trim carrier beatvol crossfeed bass vb raw channels" -- "$cur") )
+            COMPREPLY=( $(compgen -W "on off toggle status profiles profile stage tune beats test mpv show reset doctor about help head inhead 3d body mind total brain alpha theta delta beta gamma space room spin trim carrier beatvol crossfeed bass vb raw channels" -- "$cur") )
             return ;;
         dl|download|fetch)
             COMPREPLY=(); return ;;

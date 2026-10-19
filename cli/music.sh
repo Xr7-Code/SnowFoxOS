@@ -318,7 +318,7 @@ EOF
 _music_immersion_label() {
     # Compact state label for the main menu header
     if declare -F _imm_enabled &>/dev/null && [[ "$(_imm_enabled)" == "true" ]]; then
-        echo "ON · $(_imm_get IMMERSION_PROFILE brain)"
+        echo "ON · $(_imm_get IMMERSION_PROFILE inhead)"
     else
         echo "OFF"
     fi
@@ -695,7 +695,7 @@ cmd_music() {
                 local imm_state
                 imm_state=$(immersion_quick_toggle)
                 if [[ "$imm_state" == "on" ]]; then
-                    ok "Immersion mode ON — profile: $(_imm_get IMMERSION_PROFILE brain)"
+                    ok "Immersion mode ON — profile: $(_imm_get IMMERSION_PROFILE inhead)"
                     info "  Starts with the next track · tune: snowfox immersion tune"
                 elif [[ "$imm_state" == "error" ]]; then
                     err "Immersion chain failed on this system — staying OFF."

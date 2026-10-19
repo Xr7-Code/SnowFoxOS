@@ -58,18 +58,18 @@ _imm_init() {
 #  Managed by: snowfox immersion · tune with the CLI, not here
 # ============================================================
 IMMERSION_ENABLED=false
-IMMERSION_PROFILE=brain
+IMMERSION_PROFILE=inhead
 IMMERSION_CROSSFEED=0
-IMMERSION_BASS=5
+IMMERSION_BASS=0
 IMMERSION_VB=0
-IMMERSION_SPACE=1.55
-IMMERSION_ROOM=0.22
-IMMERSION_SPIN=0.35
-IMMERSION_BEATS=true
+IMMERSION_SPACE=1.30
+IMMERSION_ROOM=0
+IMMERSION_SPIN=0
+IMMERSION_BEATS=false
 IMMERSION_BEAT=10
 IMMERSION_CARRIER=400
 IMMERSION_BEAT_VOL=0.03
-IMMERSION_TRIM=-3.5
+IMMERSION_TRIM=-1.0
 IMMERSION_MPV_INCLUDE=false
 EOF
         chmod 600 "$IMM_FILE"
@@ -119,23 +119,26 @@ _imm_gt() {
 _imm_profile_norm() {
     # map aliases to canonical profile names
     case "$1" in
-        head|clarity|natural|kopf|klar)      echo "head" ;;
-        body|deep|bass|koerper|körper)       echo "body" ;;
-        mind|focus|brains|beats|gehirn)      echo "mind" ;;
-        brain|imkopf|inkopf|schaedel|schädel) echo "brain" ;;
-        total|all|full|everything|ganz)      echo "total" ;;
-        *)                                   echo "$1" ;;
+        head|clarity|natural|klar)            echo "head" ;;
+        inhead|brain|imkopf|inkopf|kopf|inside|schaedel|schädel) echo "inhead" ;;
+        3d|wide|raum|space|surround|allaround|all) echo "3d" ;;
+        body|deep|bass|koerper|körper)        echo "body" ;;
+        mind|focus|beats|gehirn)              echo "mind" ;;
+        total|full|everything|ganz)           echo "total" ;;
+        *)                                    echo "$1" ;;
     esac
 }
 
 _imm_profile_desc() {
     case "$1" in
-        head)  echo "Headphone stage — crossfeed lifts the music out of your head" ;;
-        body)  echo "Physical bass — clean sub shelf + punch + wide stereo" ;;
-        mind)  echo "Binaural focus — two pure tones, one per ear, under the music" ;;
-        brain) echo "In-head + room — super stereo, slow rotation, binaural beats" ;;
-        total) echo "Everything — crossfeed + bass + room + binaural beats" ;;
-        *)     echo "Unknown profile" ;;
+        head)   echo "Out of your head — crossfeed only, tonally neutral" ;;
+        inhead) echo "In your head — super stereo, no crossfeed, tonally neutral" ;;
+        brain)  echo "In your head — super stereo, no crossfeed, tonally neutral (alias of inhead)" ;;
+        3d)     echo "All around you — strong reflections + rotation, crossfeed, tonally neutral" ;;
+        body)   echo "Physical bass — warm body EQ + room" ;;
+        mind)   echo "Binaural focus — two pure tones, one per ear, gentle" ;;
+        total)  echo "Everything — crossfeed + bass + room + binaural beats" ;;
+        *)      echo "Unknown profile" ;;
     esac
 }
 
@@ -149,9 +152,34 @@ _imm_profile_apply() {
             _imm_set IMMERSION_BASS 0
             _imm_set IMMERSION_VB 0
             _imm_set IMMERSION_SPACE 1.00
-            _imm_set IMMERSION_ROOM 0.10
+            _imm_set IMMERSION_ROOM 0.12
             _imm_set IMMERSION_SPIN 0
             _imm_set IMMERSION_TRIM 0
+            _imm_set IMMERSION_BEATS false
+            ;;
+        inhead)
+            # Transparent in-head stage: no tone shaping, no room,
+            # no crossfeed — only the mid/side super stereo.
+            _imm_set IMMERSION_CROSSFEED 0
+            _imm_set IMMERSION_BASS 0
+            _imm_set IMMERSION_VB 0
+            _imm_set IMMERSION_SPACE 1.30
+            _imm_set IMMERSION_ROOM 0
+            _imm_set IMMERSION_SPIN 0
+            _imm_set IMMERSION_TRIM -1.0
+            _imm_set IMMERSION_BEATS false
+            ;;
+        3d)
+            # Transparent all-around stage: diffuse side reflections
+            # plus crossfeed and slow rotation carry the illusion;
+            # the tone stays flat.
+            _imm_set IMMERSION_CROSSFEED 0.50
+            _imm_set IMMERSION_BASS 0
+            _imm_set IMMERSION_VB 0
+            _imm_set IMMERSION_SPACE 1.00
+            _imm_set IMMERSION_ROOM 0.55
+            _imm_set IMMERSION_SPIN 0.40
+            _imm_set IMMERSION_TRIM 0.5
             _imm_set IMMERSION_BEATS false
             ;;
         body)
@@ -159,39 +187,29 @@ _imm_profile_apply() {
             _imm_set IMMERSION_BASS 7.5
             _imm_set IMMERSION_VB 0
             _imm_set IMMERSION_SPACE 1.10
-            _imm_set IMMERSION_ROOM 0.22
-            _imm_set IMMERSION_SPIN 0.20
-            _imm_set IMMERSION_TRIM -3.0
+            _imm_set IMMERSION_ROOM 0.25
+            _imm_set IMMERSION_SPIN 0.15
+            _imm_set IMMERSION_TRIM -1.5
             _imm_set IMMERSION_BEATS false
             ;;
         mind)
             _imm_set IMMERSION_CROSSFEED 0.25
             _imm_set IMMERSION_BASS 0
             _imm_set IMMERSION_VB 0
-            _imm_set IMMERSION_SPACE 1.10
+            _imm_set IMMERSION_SPACE 1.05
             _imm_set IMMERSION_ROOM 0.12
             _imm_set IMMERSION_SPIN 0
             _imm_set IMMERSION_TRIM 0
             _imm_set IMMERSION_BEATS true
             ;;
-        brain)
-            _imm_set IMMERSION_CROSSFEED 0
-            _imm_set IMMERSION_BASS 5
-            _imm_set IMMERSION_VB 0
-            _imm_set IMMERSION_SPACE 1.55
-            _imm_set IMMERSION_ROOM 0.22
-            _imm_set IMMERSION_SPIN 0.35
-            _imm_set IMMERSION_TRIM -3.5
-            _imm_set IMMERSION_BEATS true
-            ;;
         total)
-            _imm_set IMMERSION_CROSSFEED 0.25
+            _imm_set IMMERSION_CROSSFEED 0.30
             _imm_set IMMERSION_BASS 5
             _imm_set IMMERSION_VB 0
-            _imm_set IMMERSION_SPACE 1.25
-            _imm_set IMMERSION_ROOM 0.22
-            _imm_set IMMERSION_SPIN 0.25
-            _imm_set IMMERSION_TRIM -2.5
+            _imm_set IMMERSION_SPACE 1.20
+            _imm_set IMMERSION_ROOM 0.35
+            _imm_set IMMERSION_SPIN 0.30
+            _imm_set IMMERSION_TRIM -0.5
             _imm_set IMMERSION_BEATS true
             ;;
         *)  return 1 ;;
@@ -207,12 +225,12 @@ _imm_chain_af() {
     # Echoes the lavfi filter chain for --af=lavfi=[…] (may be empty)
     local cf bass vb space room spin trim
     cf="$(_imm_get IMMERSION_CROSSFEED 0)"
-    bass="$(_imm_get IMMERSION_BASS 5)"
+    bass="$(_imm_get IMMERSION_BASS 0)"
     vb="$(_imm_get IMMERSION_VB 0)"
-    space="$(_imm_get IMMERSION_SPACE 1.55)"
-    room="$(_imm_get IMMERSION_ROOM 0.22)"
-    spin="$(_imm_get IMMERSION_SPIN 0.35)"
-    trim="$(_imm_get IMMERSION_TRIM -3.5)"
+    space="$(_imm_get IMMERSION_SPACE 1.30)"
+    room="$(_imm_get IMMERSION_ROOM 0)"
+    spin="$(_imm_get IMMERSION_SPIN 0)"
+    trim="$(_imm_get IMMERSION_TRIM -1.0)"
 
     local parts=()
     if _imm_gt "$bass" 0; then
@@ -241,20 +259,32 @@ _imm_chain_af() {
         parts+=("pan=stereo|c0=${a}*c0${b}*c1|c1=${b}*c0+${a}*c1")
     fi
     if _imm_gt "$room" 0; then
-        # Side-only early reflections. The dry path is untouched, so the
-        # centre (vocals, bass) stays exactly where it is; only the side
-        # signal is delayed and mixed back in. A 180 Hz high-pass keeps
-        # the room out of the bass, the 9 kHz low-pass keeps it out of
-        # the hiss. The slow 0.08 Hz rotation moves the room around the
-        # head without wobbling the centre — the "8D" part, done cleanly.
-        local rgraph rv sv
-        rv=$(LC_ALL=C awk -v v="$room" 'BEGIN { printf "%.2f", v }')
-        rgraph="asplit=2[dry][side];[side]pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0,highpass=f=180,lowpass=f=9000,adelay=10|10"
+        # Diffuse side-only early reflections. The dry path stays
+        # untouched, so the centre (vocals, bass) remains exactly in
+        # place; only the side signal gets three decorrelated copies.
+        # Different L/R delays per tap create interaural time cues that
+        # externalise the image (the "all around" illusion). The taps
+        # are band-limited (200 Hz–14/10/8 kHz) so they never mud up the
+        # bass or add hiss. A slow 0.05 Hz rotation orbits the room
+        # around the head. The old single 10 ms tap caused comb filtering
+        # — that was the "quality" problem on dense music.
+        local rgraph sv dv v1 v2 v3 wet_label
+        v1=$(LC_ALL=C awk -v r="$room" 'BEGIN { printf "%.3f", r * 0.55 }')
+        v2=$(LC_ALL=C awk -v r="$room" 'BEGIN { printf "%.3f", r * 0.34 }')
+        v3=$(LC_ALL=C awk -v r="$room" 'BEGIN { printf "%.3f", r * 0.21 }')
+        dv=$(LC_ALL=C awk -v r="$room" 'BEGIN { d = 1 - 0.25 * r; if (d < 0.6) d = 0.6; printf "%.3f", d }')
+        rgraph="asplit=2[dry][side0];[side0]pan=stereo|c0=0.5*c0-0.5*c1|c1=0.5*c1-0.5*c0[side];[side]asplit=3[t1][t2][t3]"
+        rgraph+=";[t1]highpass=f=200,lowpass=f=14000,adelay=11|19,volume=${v1}[a1]"
+        rgraph+=";[t2]highpass=f=200,lowpass=f=10000,adelay=23|37,volume=${v2}[a2]"
+        rgraph+=";[t3]highpass=f=200,lowpass=f=8000,adelay=41|59,volume=${v3}[a3]"
+        rgraph+=";[a1][a2][a3]amix=inputs=3:duration=first:normalize=0[wet]"
+        wet_label="wet"
         if _imm_gt "$spin" 0; then
             sv=$(LC_ALL=C awk -v v="$spin" 'BEGIN { printf "%.2f", v }')
-            rgraph+=",apulsator=mode=sine:amount=${sv}:timing=hz:hz=0.08"
+            rgraph+=";[wet]apulsator=mode=sine:amount=${sv}:timing=hz:hz=0.05[wetsp]"
+            wet_label="wetsp"
         fi
-        rgraph+=",volume=${rv}[wet];[dry][wet]amix=inputs=2:duration=first:dropout_transition=0:normalize=0"
+        rgraph+=";[dry]volume=${dv}[dryv];[dryv][${wet_label}]amix=inputs=2:duration=first:dropout_transition=0:normalize=0"
         parts+=("$rgraph")
     fi
     _imm_gt "$cf" 0       && parts+=("crossfeed=strength=$cf:range=0.5:slope=0.5:level_in=1")
@@ -573,7 +603,7 @@ _imm_cmd_status() {
 
     local en prof
     en="$(_imm_enabled)"
-    prof="$(_imm_get IMMERSION_PROFILE brain)"
+    prof="$(_imm_get IMMERSION_PROFILE inhead)"
 
     section "State"
     bool_row "Mode" "$en" "ON" "OFF"
@@ -582,12 +612,12 @@ _imm_cmd_status() {
     section "Signal Path"
     local cf bass vb space room spin trim
     cf="$(_imm_get IMMERSION_CROSSFEED 0)"
-    bass="$(_imm_get IMMERSION_BASS 5)"
+    bass="$(_imm_get IMMERSION_BASS 0)"
     vb="$(_imm_get IMMERSION_VB 0)"
-    space="$(_imm_get IMMERSION_SPACE 1.55)"
-    room="$(_imm_get IMMERSION_ROOM 0.22)"
-    spin="$(_imm_get IMMERSION_SPIN 0.35)"
-    trim="$(_imm_get IMMERSION_TRIM -3.5)"
+    space="$(_imm_get IMMERSION_SPACE 1.30)"
+    room="$(_imm_get IMMERSION_ROOM 0)"
+    spin="$(_imm_get IMMERSION_SPIN 0)"
+    trim="$(_imm_get IMMERSION_TRIM -1.0)"
 
     if _imm_gt "$bass" 0; then
         row "Bass (body)" "low shelf ${bass} dB @ 50 Hz · punch +2 dB @ 95 Hz" "$GREEN"
@@ -608,9 +638,9 @@ _imm_cmd_status() {
     fi
     if _imm_gt "$room" 0; then
         if _imm_gt "$spin" 0; then
-            row "Room / spin" "side reflections ${room} · rotation ${spin} · 0.08 Hz" "$GREEN"
+            row "Room / spin" "3-tap reflections ${room} · rotation ${spin} · 0.05 Hz" "$GREEN"
         else
-            row "Room" "side reflections ${room}" "$GREEN"
+            row "Room" "3-tap reflections ${room}" "$GREEN"
         fi
     else
         row "Room" "off"
@@ -659,7 +689,7 @@ _imm_cmd_status() {
     hint "$(_imm_output_hint)"
 
     echo ""
-    info "Commands: snowfox immersion <on|off|toggle|profile|tune|beats|test|mpv|doctor|about>"
+    info "Commands: snowfox immersion <on|off|toggle|stage|profile|tune|beats|test|mpv|doctor|about>"
     echo ""
 }
 
@@ -677,7 +707,7 @@ _imm_cmd_on() {
     if [[ -n "${1:-}" ]]; then
         if ! _imm_profile_apply "$1"; then
             err "Unknown profile: $1"
-            info "  Profiles: head · body · mind · brain · total"
+            info "  Profiles: head · inhead · 3d · body · mind · total"
             exit 1
         fi
     fi
@@ -699,9 +729,10 @@ _imm_cmd_on() {
 
     _imm_set IMMERSION_ENABLED true
     _imm_sync_all
+    _imm_beats_reconcile
 
     echo ""
-    ok "Immersion mode ON — profile: $(_imm_get IMMERSION_PROFILE brain)"
+    ok "Immersion mode ON — profile: $(_imm_get IMMERSION_PROFILE inhead)"
     row "Chain" "$(_imm_describe_chain)"
     local otype
     otype="$(_imm_output_type)"
@@ -762,9 +793,10 @@ _imm_describe_chain() {
 # ============================================================
 _imm_cmd_profiles() {
     header "Immersion Profiles"
-    local p
-    for p in head body mind brain total; do
-        if [[ "$p" == "$(_imm_get IMMERSION_PROFILE brain)" ]]; then
+    local p cur
+    cur="$(_imm_profile_norm "$(_imm_get IMMERSION_PROFILE inhead)")"
+    for p in head inhead 3d body mind total; do
+        if [[ "$p" == "$cur" ]]; then
             row "$p" "$(_imm_profile_desc "$p")" "$GREEN"
         else
             row "$p" "$(_imm_profile_desc "$p")"
@@ -783,14 +815,47 @@ _imm_cmd_profile() {
     fi
     if ! _imm_profile_apply "$name"; then
         err "Unknown profile: $name"
-        info "  Profiles: head · body · mind · brain · total"
+        info "  Profiles: head · inhead · 3d · body · mind · total"
         exit 1
     fi
     _imm_sync_all
-    ok "Profile: $(_imm_get IMMERSION_PROFILE brain) — $(_imm_profile_desc "$(_imm_get IMMERSION_PROFILE brain)")"
+    _imm_beats_reconcile
+    ok "Profile: $(_imm_get IMMERSION_PROFILE inhead) — $(_imm_profile_desc "$(_imm_get IMMERSION_PROFILE inhead)")"
     if [[ "$(_imm_enabled)" != "true" ]]; then
         info "  Enabled? snowfox immersion on"
     fi
+}
+
+_imm_cmd_stage() {
+    # The requested one-switch spatial setting: in your head vs 3D all around.
+    # Both stages are tonally neutral (flat EQ, no virtual bass, no beats).
+    local name="${1:-}"
+    if [[ -z "$name" ]]; then
+        header "Spatial Stage"
+        row "inhead" "in your head — super stereo, no room, no crossfeed" "$GREEN"
+        row "3d"     "all around you — 3-tap reflections, rotation, crossfeed" "$GREEN"
+        echo ""
+        info "Apply: snowfox immersion stage inhead|3d"
+        info "Both keep the tone flat. Add the brain layer: tune beats on"
+        echo ""
+        return
+    fi
+    case "$name" in
+        inhead|imkopf|inkopf|kopf|inside)           name="inhead" ;;
+        3d|wide|raum|space|surround|allaround|all)  name="3d" ;;
+        *)
+            err "Unknown stage: $name"
+            info "  Stages: inhead · 3d"
+            exit 1 ;;
+    esac
+    if ! _imm_profile_apply "$name"; then
+        err "Could not apply stage: $name"
+        exit 1
+    fi
+    _imm_sync_all
+    _imm_beats_reconcile
+    ok "Stage: $name — $(_imm_profile_desc "$name")"
+    info "  Tone is flat and the beat layer is off. Add: tune beats on · tune bass 2"
 }
 
 # ============================================================
@@ -816,7 +881,7 @@ _imm_cmd_tune() {
         row "bass"      "0 – 12 dB    sub shelf + punch + mud cut (0 = off)"
         row "vb"        "0 / 0.5 – 3  psychoacoustic bass · higher = stronger"
         row "space"     "1 – 2        super stereo · inside your head (1 = off)"
-        row "room"      "0 – 0.6      side reflections · the room (0 = off)"
+        row "room"      "0 – 1       3-tap reflections · the room (0 = off)"
         row "spin"      "0 – 1        slow room rotation (0 = static)"
         row "trim"      "-12 – +6 dB  headroom (lower = more limiter space)"
         row "beats"     "on|off|band|Hz   binaural layer"
@@ -844,8 +909,8 @@ _imm_cmd_tune() {
             fi
             _imm_set IMMERSION_VB "$val" ;;
         width)
-            # Deprecated alias: the old haas "width" (1.0–1.6) maps to the
-            # new room amount (0–0.6) so old muscle memory keeps working.
+            # Deprecated alias: the old haas "width" (1.0–1.6) maps onto
+            # room 0–0.6 so old muscle memory keeps working.
             _imm_is_num "$val" 1 1.6 || { err "width must be 1 – 1.6"; exit 1; }
             local r
             r=$(LC_ALL=C awk -v v="$val" 'BEGIN { printf "%.2f", v - 1 }')
@@ -853,7 +918,7 @@ _imm_cmd_tune() {
             key="room"; val="$r"
             info "  width is deprecated — stored as room ${r}." ;;
         room)
-            _imm_is_num "$val" 0 0.6 || { err "room must be 0 – 0.6"; exit 1; }
+            _imm_is_num "$val" 0 1 || { err "room must be 0 – 1"; exit 1; }
             _imm_set IMMERSION_ROOM "$val" ;;
         spin)
             _imm_is_num "$val" 0 1 || { err "spin must be 0 – 1"; exit 1; }
@@ -914,6 +979,19 @@ _imm_cmd_tune() {
 _imm_sync_all() {
     # Keep generated artifacts in sync with the config
     _imm_mpv_include_sync
+}
+
+_imm_beats_reconcile() {
+    # After a profile/stage change: if a beat layer is already running,
+    # stop it or restart it with the new settings. Never starts a layer
+    # that was not running before.
+    _imm_beats_running || return 0
+    local mode="manual"
+    [[ -f "$IMM_MODE_FILE" ]] && mode="$(cat "$IMM_MODE_FILE")"
+    _imm_beats_stop
+    if [[ "$(_imm_beats_on)" == "true" ]]; then
+        _imm_beats_start "$mode"
+    fi
 }
 
 # ============================================================
@@ -1150,7 +1228,7 @@ _imm_cmd_test() {
         warn "RAW mode — no immersion processing (for A/B comparison)."
     else
         if [[ "$(_imm_enabled)" == "true" ]]; then
-            ok "Playing through immersion mode, profile: $(_imm_get IMMERSION_PROFILE brain)"
+            ok "Playing through immersion mode, profile: $(_imm_get IMMERSION_PROFILE inhead)"
         else
             warn "Immersion mode is OFF — playing the configured chain for this test anyway."
         fi
@@ -1197,15 +1275,17 @@ _imm_cmd_about() {
   always bleed into both ears. Crossfeed (Bauer / bs2b style) mixes a
   little of L into R and vice versa, delayed and low-passed — the
   stage moves in front of you and long sessions hurt less.
-  Want the opposite — music INSIDE the head? Use the 'brain' profile,
-  which turns crossfeed off.${RESET}
+  Want the opposite — music INSIDE the head? Use the 'inhead' stage
+  (old name: brain), which turns crossfeed off.${RESET}
 
-  ${LPURPLE}${BOLD}2 · Body EQ — the body channel${RESET}
-  ${DGRAY}Below ~80 Hz you feel more than you hear. The chain lifts 50 Hz
-  (chest/body), adds a small 95 Hz punch, removes the 280 Hz mud that
-  makes bass sound dull and boomy, and adds 3.2 kHz presence so the
-  music stays clear instead of disappearing behind the bass. A 28 Hz
-  high-pass removes inaudible rumble that only eats limiter headroom.
+  ${LPURPLE}${BOLD}2 · Body EQ — optional, off in the transparent stages${RESET}
+  ${DGRAY}With body EQ enabled (tune bass > 0): below ~80 Hz you feel more
+  than you hear. The chain lifts 50 Hz (chest/body), adds a small 95 Hz
+  punch, removes the 280 Hz mud that makes bass sound dull and boomy,
+  and adds 3.2 kHz presence so the music stays clear instead of
+  disappearing behind the bass. A 28 Hz high-pass removes inaudible
+  rumble that only eats limiter headroom. The 'inhead' and '3d' stages
+  leave all of this off — they sound like normal music.
   The optional virtual bass adds harmonics that the ear places back at
   the missing fundamental; off by default because it can sound fuzzy
   (enable: tune vb 1.5).${RESET}
@@ -1218,14 +1298,16 @@ _imm_cmd_about() {
     ${DGRAY}Knob: tune space 1.0 (off) … 2.0 (extreme)${RESET}
 
   ${LPURPLE}${BOLD}4 · Room + spin — the space around your head${RESET}
-  ${DGRAY}The room is built from the side signal only: a 10 ms delayed,
-  180 Hz–9 kHz copy is mixed back in. The centre (vocals, bass) is
-  untouched, so the room widens the image without making it muddy.
-  A very slow 0.08 Hz rotation moves that room around your head —
-  the clean version of the "8D" effect. (FFmpeg's haas filter was
-  removed: it boosted the centre by +4…+6 dB and folded hard-panned
-  material to one side.)${RESET}
-    ${DGRAY}Knobs: tune room 0.0 (off) … 0.6 · tune spin 0 (static) … 1${RESET}
+  ${DGRAY}The room is built from the side signal only: three decorrelated,
+  band-limited copies (11/19, 23/37 and 41/59 ms, 200 Hz–14/10/8 kHz)
+  are mixed back in, and the dry signal is pulled down slightly. The
+  centre (vocals, bass) stays exactly in place, so the image widens
+  without turning muddy. A slow 0.05 Hz rotation orbits that room
+  around your head — the clean version of the "8D" effect. The many
+  taps avoid the comb filtering of a single delay. (FFmpeg's haas
+  filter was removed: it boosted the centre by +4…+6 dB and folded
+  hard-panned material to one side.)${RESET}
+    ${DGRAY}Knobs: tune room 0.0 (off) … 1.0 · tune spin 0 (static) … 1${RESET}
 
   ${LPURPLE}${BOLD}5 · Binaural beats — the brain channel${RESET}
   ${DGRAY}Each ear receives a pure tone; the difference between them is the
@@ -1244,14 +1326,26 @@ _imm_cmd_about() {
   the same loudness as the raw signal — loud masters stay clean
   instead of pumping into the limiter.${RESET}
 
+  ${LPURPLE}${BOLD}7 · The two stages — pick your illusion${RESET}
+  ${DGRAY}inhead — super stereo only: flat tone, no room, no crossfeed.
+  The music sits between your ears, like a close headphone mix.
+  3d — three diffuse side reflections with different L/R delays,
+  crossfeed and slow rotation: the image leaves the head and spreads
+  around you. Both are tonally neutral — no shelf, no cuts, no added
+  tones. Add the brain layer only if you want it: tune beats on.
+  Switch: snowfox immersion stage inhead | 3d${RESET}
+
   ${PURPLE}${BOLD}Good to know${RESET}
-  ${DGRAY}· Beats need headphones — on speakers both ears hear both tones
+  ${DGRAY}· inhead and 3d are the transparent stages: normal music first,
+    illusion second. Beats are off there; enable with tune beats on.
+  · Beats need headphones — on speakers both ears hear both tones
     and the effect mostly collapses into a flutter.
-  · Too dull/boomy? Lower the body: tune bass 4 · tune room 0.15.
-  · Too hissy? Lower the side/room: tune space 1.3 · tune room 0.12 ·
-    tune spin 0.2. The room is already band-limited to 9 kHz.
-  · Want it more in-head? Raise: tune space 1.7 · tune room 0.1.
-  · Want it more around you? Raise: tune room 0.3 · tune spin 0.5.
+  · Too dull/boomy? You are in a coloured profile — switch back:
+    snowfox immersion stage inhead.
+  · Too hissy? Lower the side/room: tune space 1.2 · tune room 0.3 ·
+    tune spin 0.2. The room taps are already band-limited.
+  · Want it more in-head? tune space 1.4 · tune room 0.
+  · Want it more around you? tune room 0.8 · tune spin 0.6.
   · Beat too strong? tune beatvol 0.02 · tune carrier 400.
   · Effects are subtle by design: they should survive long
     sessions, not shout at you.
@@ -1261,6 +1355,7 @@ _imm_cmd_about() {
     core, no network, no re-encoding, no telemetry.${RESET}
 
   ${DGRAY}Tune it:   snowfox immersion tune <key> <value>
+  Stage:    snowfox immersion stage inhead | 3d
   Compare:  snowfox immersion test   ·   snowfox immersion test raw
   Channels: snowfox immersion test channels
   Beats:    snowfox immersion test beats${RESET}
@@ -1274,12 +1369,13 @@ EOF
 # ============================================================
 _imm_cmd_reset() {
     _imm_init
-    _imm_profile_apply brain || true
+    _imm_profile_apply inhead || true
     _imm_set IMMERSION_BEAT 10
     _imm_set IMMERSION_CARRIER 400
     _imm_set IMMERSION_BEAT_VOL 0.03
     _imm_sync_all
-    ok "Immersion settings back to defaults (profile: brain)."
+    _imm_beats_reconcile
+    ok "Immersion settings back to defaults (profile: inhead)."
 }
 
 _imm_cmd_doctor() {
@@ -1357,7 +1453,8 @@ _imm_cmd_help() {
     row "off"            "disable · restores the raw signal"
     row "toggle"         "flip the state"
     row "status"         "full state overview"
-    row "profile <name>" "head · body · mind · brain · total"
+    row "stage <mode>"   "inhead (in your head) · 3d (all around you)"
+    row "profile <name>" "head · inhead · 3d · body · mind · total"
     row "tune <key> <v>" "crossfeed bass vb space room spin trim beats carrier beatvol"
     row "beats <on|off>" "manual brain layer for any player"
     row "test [mode]"    "chain 16 s · raw · channels · beats"
@@ -1381,6 +1478,7 @@ cmd_immersion() {
         toggle|t)           shift; _imm_cmd_toggle "$@" ;;
         profiles)           _imm_cmd_profiles ;;
         profile)            _imm_cmd_profile "$2" ;;
+        stage)              shift; _imm_cmd_stage "$@" ;;
         tune|set)           shift; _imm_cmd_tune "$@" ;;
         beats|beat)         shift; _imm_cmd_beats "$@" ;;
         show)               _imm_cmd_show ;;
@@ -1392,7 +1490,7 @@ cmd_immersion() {
         help|-h|--help)     _imm_cmd_help ;;
         *)
             err "Unknown immersion subcommand: $sub"
-            info "  Usage: snowfox immersion <on|off|toggle|status|profile|tune|beats|test|mpv|show|reset|doctor|about>"
+            info "  Usage: snowfox immersion <on|off|toggle|status|stage|profile|tune|beats|test|mpv|show|reset|doctor|about>"
             exit 1 ;;
     esac
 }
