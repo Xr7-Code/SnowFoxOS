@@ -206,6 +206,7 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 - **picom** — compositor with rounded corners and soft shadows (fading disabled for stability)
 - **Zen Browser** — privacy-focused browser based on Firefox (optional)
 - **PipeWire** — modern audio stack with WirePlumber
+- **Immersion Mode** — `snowfox immersion on` turns listening into a physical experience: headphone crossfeed, psychoacoustic sub-bass, Haas widening and a binaural-beat brain layer — all real-time, local DSP in mpv (no re-encoding)
 - **Dunst** — notification daemon, tuned to the SnowFox palette
 - **Clip-Saver** — keeps clipboard contents active even after closing the source window (`clipnotify` + `xclip`, no history bloat)
 - **Flameshot** — screenshot tool with area selection and annotation (replaces GIMP for the standard workflow)
@@ -266,9 +267,38 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 
 | Command | Description |
 |---|---|
+| `snowfox music` | Gum music TUI: search, stream and playlists (YT Music, Spotify, SoundCloud) |
+| `snowfox immersion [on\|off]` | Deep-listening DSP: crossfeed, body bass, binaural beats |
 | `snowfox stream <search\|URL>` | Stream video/audio directly in mpv — no browser, no tracking |
 | `snowfox dl <URL>` | Download video or audio |
 | `snowfox fetch <URL>` | High-speed download via 16 parallel connections |
+
+### Immersion Mode — Deep Listening
+
+`snowfox immersion on` activates a real-time DSP chain for everything SnowFox plays (`snowfox music`, `snowfox stream`). Four stages, each aimed at a different part of the experience:
+
+| Stage | Technology | What it does |
+|---|---|---|
+| **Head** | Bauer/bs2b-style crossfeed | Mixes a delayed, low-passed part of L into R and vice versa — the band steps out of your skull and long sessions stop hurting |
+| **Body** | Low shelf + psychoacoustic virtual bass | Lifts the sub range and synthesizes harmonics that the ear places back at the missing fundamental — chest bass on hardware that cannot play 40 Hz |
+| **Space** | Haas stereo enhancer | A few milliseconds of side delay widen the stage without hollowing out the centre |
+| **Brain** | Two pure tones, one per ear | The difference frequency (e.g. 200 Hz left / 210 Hz right) is not in the air — the brainstem creates the beat |
+
+Profiles: **head** (crossfeed only) · **body** (bass + space) · **mind** (beats + crossfeed) · **total** (everything, default).
+
+```bash
+snowfox immersion on               # enable with the current profile
+snowfox immersion on body          # enable + choose a profile
+snowfox immersion status           # state, chain, output, beat layer
+snowfox immersion test             # 16 s A/B test signal
+snowfox immersion test raw         # same signal without processing
+snowfox immersion tune bass 7      # fine-tune crossfeed, bass, width, beats
+snowfox immersion about            # the science, briefly
+```
+
+The beat frequency follows the classic EEG bands: **delta** 2.5 Hz (deep sleep), **theta** 6 Hz (drifting), **alpha** 10 Hz (calm focus), **SMR** 13.5 Hz, **beta** 18 Hz (alert), **gamma** 40 Hz (high attention). Default: 200 Hz carrier, 10 Hz difference, gentle amplitude — made for long sessions.
+
+Binaural beats need headphones. The optional `snowfox immersion mpv on` applies the DSP chain to every mpv start via `~/.config/mpv/mpv.conf` (the beat layer stays out of it, so video files without audio keep working). Everything runs locally in raw FFmpeg filter graphs (audio-only `--af`/`lavfi-complex`), at well under 1 % of one CPU core — no network, no telemetry, no re-encoding, and the limiter guarantees no clipping.
 
 ### Software (Stash)
 
@@ -428,6 +458,7 @@ i3 starts automatically from TTY1.
 | Terminal | kitty |
 | Browser | zen-browser (optional) |
 | Audio | pipewire + wireplumber |
+| Audio DSP | FFmpeg libavfilter in mpv — Immersion Mode |
 | Compositor | picom |
 | Notifications | dunst |
 | Clipboard | clip-saver + clipnotify |

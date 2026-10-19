@@ -271,6 +271,8 @@ cmd_stream() {
     echo ""
 
     fox "Starting stream..."
+    immersion_mpv_args
+    immersion_beats_session_start
     mpv \
         --ytdl-raw-options="force-ipv4=,no-check-certificate=" \
         --ytdl-format="bestvideo[vcodec^=vp9][height<=1080]+bestaudio/bestvideo[vcodec^=avc1][height<=1080]+bestaudio/best[height<=1080]" \
@@ -279,5 +281,7 @@ cmd_stream() {
         --demuxer-max-bytes=150MiB \
         --demuxer-max-back-bytes=75MiB \
         $EXTRA_OPTS \
+        "${IMM_MPV_ARGS[@]}" \
         "$URL"
+    immersion_beats_session_stop
 }

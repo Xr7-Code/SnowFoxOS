@@ -110,6 +110,20 @@ cmd_settings_overview() {
     bool_row "Autostart on boot" "$([[ "$boot_state" == "on" ]] && echo true || echo false)" "on" "off"
     hint "Change: snowfox bt <on|off|toggle|boot-on|boot-off>"
 
+    # ── Audio ────────────────────────────────────────────────
+    section "Audio"
+    local imm_state="false" imm_prof="total"
+    if declare -F _imm_enabled &>/dev/null; then
+        imm_state="$(_imm_enabled)"
+        imm_prof="$(_imm_get IMMERSION_PROFILE total)"
+    fi
+    if [[ "$imm_state" == "true" ]]; then
+        bool_row "Immersion" true "on · profile: $imm_prof"
+    else
+        bool_row "Immersion" false "off"
+    fi
+    hint "Change: snowfox immersion <on|off|toggle|profile|tune>  ·  Why: snowfox immersion about"
+
     # ── Appearance ───────────────────────────────────────────
     section "Appearance"
     local cur_theme="snowfox"
@@ -150,8 +164,8 @@ cmd_settings_gui() {
     while true; do
         local CHOICE
         CHOICE=$(echo -e \
-            "  Default Applications\n  Keyboard Layout\n  System Language\n  Timezone\n  Bluetooth\n  Color Theme\n  User Management\n  ─────────────────────────────\n  Back" \
-            | rofi -dmenu -p "🦊 Settings" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 420 -lines 11)
+            "  Default Applications\n  Keyboard Layout\n  System Language\n  Timezone\n  Bluetooth\n  Immersion Mode\n  Color Theme\n  User Management\n  ─────────────────────────────\n  Back" \
+            | rofi -dmenu -p "🦊 Settings" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 420 -lines 12)
 
         [[ -z "$CHOICE" ]] && exit 0
 
@@ -161,6 +175,7 @@ cmd_settings_gui() {
             *"System Language"*)      _gui_language ;;
             *"Timezone"*)             _gui_timezone ;;
             *"Bluetooth"*)            _gui_bluetooth ;;
+            *"Immersion Mode"*)       _gui_immersion ;;
             *"Color Theme"*)          cmd_theme_gui ;;
             *"User Management"*)      _gui_user ;;
             *"Back"*)                 exit 0 ;;
@@ -259,6 +274,44 @@ _gui_bluetooth() {
         *"Toggle"*)                     _bt_toggle ;;
         *"Enable autostart"*)           _bt_boot_on ;;
         *"Disable autostart"*)          _bt_boot_off ;;
+    esac
+}
+
+_gui_immersion() {
+    local ROFI_THEME="$HOME/.config/rofi/config.rasi"
+    local state="false" prof="total"
+    declare -F _imm_enabled &>/dev/null && state="$(_imm_enabled)"
+    declare -F _imm_get &>/dev/null && prof="$(_imm_get IMMERSION_PROFILE total)"
+
+    local CHOICE
+    CHOICE=$(echo -e "  Turn on\n  Turn off\n  Profile: head — out of your head\n  Profile: body — feel the bass\n  Profile: mind — binaural focus\n  Profile: total — everything\n  ─────────────────────────────\n  Back" \
+        | rofi -dmenu -p "🦊 Immersion ($state · $prof)" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 460 -lines 10)
+
+    [[ -z "$CHOICE" || "$CHOICE" == *"Back"* ]] && return
+
+    case "$CHOICE" in
+        *"Turn on"*)
+            if ( cmd_immersion on ) >/dev/null 2>&1; then
+                notify-send "🦊 SnowFox" "Immersion mode ON ($prof)" 2>/dev/null || true
+            else
+                notify-send "🦊 SnowFox" "Immersion failed — run: snowfox immersion doctor" 2>/dev/null || true
+            fi ;;
+        *"Turn off"*)
+            _imm_set IMMERSION_ENABLED false
+            _imm_beats_stop
+            notify-send "🦊 SnowFox" "Immersion mode OFF" 2>/dev/null || true ;;
+        *"Profile: head"*)
+            _imm_profile_apply head && _imm_sync_all
+            notify-send "🦊 SnowFox" "Immersion profile: head" 2>/dev/null || true ;;
+        *"Profile: body"*)
+            _imm_profile_apply body && _imm_sync_all
+            notify-send "🦊 SnowFox" "Immersion profile: body" 2>/dev/null || true ;;
+        *"Profile: mind"*)
+            _imm_profile_apply mind && _imm_sync_all
+            notify-send "🦊 SnowFox" "Immersion profile: mind" 2>/dev/null || true ;;
+        *"Profile: total"*)
+            _imm_profile_apply total && _imm_sync_all
+            notify-send "🦊 SnowFox" "Immersion profile: total" 2>/dev/null || true ;;
     esac
 }
 

@@ -44,6 +44,7 @@ SnowFoxOS/
 │   ├── security.sh                   # Network audit & live connections (snowfox audit)
 │   ├── media.sh                      # Video/audio stream & high-speed fetch (snowfox stream/dl/fetch)
 │   ├── music.sh                      # Gum TUI: music search, playlists, sources (snowfox music)
+│   ├── immersion.sh                  # Deep-listening DSP: crossfeed, bass, binaural beats (snowfox immersion)
 │   ├── desktop.sh                    # Autostart, window layout & WebApps (snowfox auto/lay/web)
 │   ├── stash.sh                      # Integrated package manager / Software Stash (snowfox stash)
 │   ├── settings.sh                   # System settings in terminal & Rofi GUI (snowfox set)
@@ -111,7 +112,7 @@ SnowFoxOS/
 - **Purpose:** Primary Command Line Interface (CLI) to control the entire system.
 - **Functionality:**
   - Checks for the existence of CLI modules under `/usr/local/lib/snowfox/cli/`.
-  - Sources all submodules (`status.sh`, `system.sh`, `hardware.sh`, `media.sh`, `security.sh`, `desktop.sh`, `stash.sh`, `settings.sh`, `theme.sh`, `doctor.sh`, `mesh.sh`, `ai.sh`, `snap.sh`, `tor.sh`, `help.sh`).
+  - Sources all submodules (`status.sh`, `system.sh`, `hardware.sh`, `media.sh`, `music.sh`, `immersion.sh`, `security.sh`, `desktop.sh`, `stash.sh`, `settings.sh`, `theme.sh`, `doctor.sh`, `mesh.sh`, `ai.sh`, `snap.sh`, `tor.sh`, `help.sh`).
   - Acts as a dispatcher for all `snowfox <command>` calls with short aliases (e.g., `st`, `up`, `prof`, `doc`, `air`, `dl`, `wall`).
 
 ### 3. `snowfox-greeting.sh`
@@ -275,6 +276,13 @@ CLI modules reside at `/usr/local/lib/snowfox/cli/` after installation and are m
 - `Streaming Source`: Changes the search backend (persisted in `~/.config/snowfox/music_source.txt`).
 - `Stream direct URL`: Plays any direct media link through `mpv`.
 - **Dependency check:** if `gum` is not installed, the command prints step-by-step installation instructions (Charm APT repository, prebuilt binary, or `go install`) and exits cleanly.
+
+### `cli/immersion.sh` (`snowfox immersion`)
+- Real-time **deep-listening DSP** for `snowfox music`, `snowfox stream` and (opt-in) every `mpv` playback.
+- Builds an FFmpeg libavfilter chain per profile — `bass` low shelf (body), `virtualbass` psychoacoustic sub-harmonics, `haas` stereo widening, `crossfeed` headphone staging and a final lookahead limiter — and injects it through `mpv --af=lavfi=[…]`.
+- Optional **binaural beat layer**: a detached `mpv` generator process feeds two pure tones (one per ear) via `aevalsrc`, started/stopped around playback sessions or manually (`snowfox immersion beats on`). It mixes with any player through PipeWire.
+- Profiles: `head`, `body`, `mind`, `total`; tunables: crossfeed, bass, virtual bass, width, beat band/frequency, carrier, level. State lives in `~/.config/snowfox/immersion.conf`.
+- `test` renders a 16-second A/B signal with `ffmpeg`; `doctor` validates dependencies and both filter graphs; `mpv on` writes a managed include into `~/.config/mpv/mpv.conf`; `about` explains the signal path.
 
 ### `cli/desktop.sh` (`snowfox auto` / `snowfox lay` / `snowfox web`)
 - `cmd_start`: Manages autostart entries in i3 and `~/.config/autostart/`.

@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Installed path of the CLI modules
 CLI_DIR="/usr/local/lib/snowfox/cli"
 
-if [[ ! -d "$CLI_DIR" || ! -f "$CLI_DIR/music.sh" ]]; then
+if [[ ! -d "$CLI_DIR" || ! -f "$CLI_DIR/music.sh" || ! -f "$CLI_DIR/immersion.sh" ]]; then
     if [[ -d "$SCRIPT_DIR/cli" ]]; then
         CLI_DIR="$SCRIPT_DIR/cli"
     fi
@@ -31,6 +31,7 @@ source "$CLI_DIR/system.sh"
 source "$CLI_DIR/hardware.sh"
 source "$CLI_DIR/media.sh"
 source "$CLI_DIR/music.sh"
+source "$CLI_DIR/immersion.sh"
 source "$CLI_DIR/security.sh"
 source "$CLI_DIR/desktop.sh"
 source "$CLI_DIR/stash.sh"
@@ -75,6 +76,7 @@ case "$1" in
     dl|download)    cmd_download "$2" ;;
     fetch)          cmd_fetch "$2" ;;
     music|m)        cmd_music ;;
+    imm|immersion)  shift; cmd_immersion "$@" ;;
 
     # ── Desktop ──────────────────────────────────────────────
     auto|autostart) cmd_start "$2" "$3" ;;

@@ -43,6 +43,12 @@ cmd_help() {
 
     _help_section "Media"
     _help_cmd "snowfox music"                    "TUI music streaming app (YT Music, Spotify, SoundCloud)"
+    _help_cmd "snowfox immersion"                "Deep-listening mode: status & profile"
+    _help_cmd "snowfox immersion on|off"         "Toggle the DSP chain (crossfeed, bass, beats)"
+    _help_cmd "snowfox immersion profile <name>" "head · body · mind · total"
+    _help_cmd "snowfox immersion tune <k> <v>"   "Fine-tune crossfeed, bass, width, beats"
+    _help_cmd "snowfox immersion test"           "16 s A/B test signal — hear the difference"
+    _help_cmd "snowfox immersion about"          "How crossfeed, virtual bass & binaural beats work"
     _help_cmd "snowfox stream <search|URL>"      "Stream video/audio via mpv"
     _help_cmd "snowfox dl <URL>"                 "Download video or audio"
     _help_cmd "snowfox fetch <URL>"              "High-speed download (16 connections)"

@@ -42,7 +42,7 @@ _snowfox_complete() {
 
     local CMDS="status battery update profile doctor reset
                 gpu kill air audit tor
-                stream download fetch music
+                stream download fetch music immersion
                 auto layout stash web network wallpaper display lock
                 settings bluetooth keyboard language timezone user defaults
                 theme
@@ -53,6 +53,14 @@ _snowfox_complete() {
         snowfox|sf)
             COMPREPLY=( $(compgen -W "$CMDS" -- "$cur") )
             return ;;
+        stream)         COMPREPLY=( $(compgen -W "-a --audio" -- "$cur") ); return ;;
+        music|m)
+            COMPREPLY=(); return ;;
+        immersion|imm)
+            COMPREPLY=( $(compgen -W "on off toggle status profiles profile tune beats test mpv show reset doctor about help head body mind total alpha theta delta beta gamma" -- "$cur") )
+            return ;;
+        dl|download|fetch)
+            COMPREPLY=(); return ;;
         profile|prof)
             COMPREPLY=( $(compgen -W "balanced performance battery privacy status" -- "$cur") )
             return ;;

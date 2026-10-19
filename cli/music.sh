@@ -315,17 +315,27 @@ EOF
 # ============================================================
 #  Screens
 # ============================================================
+_music_immersion_label() {
+    # Compact state label for the main menu header
+    if declare -F _imm_enabled &>/dev/null && [[ "$(_imm_enabled)" == "true" ]]; then
+        echo "ON · $(_imm_get IMMERSION_PROFILE total)"
+    else
+        echo "OFF"
+    fi
+}
+
 _music_main_menu() {
     _music_banner
     echo "" >&2
     gum style --foreground "$GUM_DIM" --padding "0 2" \
-        "Source: $(_music_src_display)    ·    Playlists: $(_pl_count)" 1>&2
+        "Source: $(_music_src_display)    ·    Playlists: $(_pl_count)    ·    Immersion: $(_music_immersion_label)" 1>&2
     echo "" >&2
-    _music_choose "What would you like to do?" 7 \
+    _music_choose "What would you like to do?" 8 \
         "🎵  Browse & Search" \
         "📂  Playlists" \
         "🎧  Streaming Source" \
         "🔗  Stream direct URL" \
+        "🧠  Immersion Mode" \
         "🚪  Quit"
 }
 
@@ -429,7 +439,10 @@ _music_play() {
         "mpv — [Space] pause · [←/→] seek · [9/0] volume · [q] quit" 1>&2
     echo "" >&2
     fox "Streaming…"
-    mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" "$url"
+    immersion_mpv_args
+    immersion_beats_session_start
+    mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" "${IMM_MPV_ARGS[@]}" "$url"
+    immersion_beats_session_stop
 
     if [[ "$ask_save" == "1" ]] && \
        gum confirm "Add \"$title\" to a playlist?" \
@@ -572,7 +585,10 @@ _music_playlist_play() {
     gum style --foreground "$GUM_DIM" --padding "0 4" \
         "$count tracks queued in mpv — [q] to stop" 1>&2
     echo "" >&2
-    mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" --playlist="$urls_file"
+    immersion_mpv_args
+    immersion_beats_session_start
+    mpv --no-video --ytdl-raw-options="force-ipv4=,no-check-certificate=" "${IMM_MPV_ARGS[@]}" --playlist="$urls_file"
+    immersion_beats_session_stop
     rm -f "$urls_file"
 }
 
@@ -675,6 +691,20 @@ cmd_music() {
             *Playlists*)     _music_playlists_menu ;;
             *Source*)        _music_source_menu ;;
             *"direct URL"*)  _music_stream_url ;;
+            *Immersion*)
+                local imm_state
+                imm_state=$(immersion_quick_toggle)
+                if [[ "$imm_state" == "on" ]]; then
+                    ok "Immersion mode ON — profile: $(_imm_get IMMERSION_PROFILE total)"
+                    info "  Starts with the next track · tune: snowfox immersion tune"
+                elif [[ "$imm_state" == "error" ]]; then
+                    err "Immersion chain failed on this system — staying OFF."
+                    info "  Diagnostics: snowfox immersion doctor"
+                else
+                    warn "Immersion mode OFF — raw signal for the next track."
+                fi
+                sleep 1
+                ;;
             *Quit*)          _music_exit; return 0 ;;
         esac
     done
