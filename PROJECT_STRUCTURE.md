@@ -279,10 +279,11 @@ CLI modules reside at `/usr/local/lib/snowfox/cli/` after installation and are m
 
 ### `cli/immersion.sh` (`snowfox immersion`)
 - Real-time **deep-listening DSP** for `snowfox music`, `snowfox stream` and (opt-in) every `mpv` playback.
-- Builds an FFmpeg libavfilter chain per profile — `bass` low shelf (body), `virtualbass` psychoacoustic sub-harmonics, `haas` stereo widening, `crossfeed` headphone staging and a final lookahead limiter — and injects it through `mpv --af=lavfi=[…]`.
-- Optional **binaural beat layer**: a detached `mpv` generator process feeds two pure tones (one per ear) via `aevalsrc`, started/stopped around playback sessions or manually (`snowfox immersion beats on`). It mixes with any player through PipeWire.
-- Profiles: `head`, `body`, `mind`, `brain`, `total` (default: `brain`, the in-head profile); tunables: crossfeed, bass, virtual bass, super-stereo space, width, headroom trim, beat band/frequency, carrier, level. State lives in `~/.config/snowfox/immersion.conf`.
-- `test` renders a 16-second A/B signal with `ffmpeg`; `doctor` validates dependencies and both filter graphs; `mpv on` writes a managed include into `~/.config/mpv/mpv.conf`; `about` explains the signal path.
+- Builds an FFmpeg libavfilter chain per profile — 28 Hz high-pass, 50 Hz body shelf, 95 Hz punch, 280 Hz mud cut, 3.2 kHz presence, mid/side super stereo, a side-only room stage (10 ms delay + 0.08 Hz rotation), `crossfeed` headphone staging and a final lookahead limiter (`level=false`, so it never lifts noise) — and injects it through `mpv --af=lavfi=[…]`.
+- The room stage replaces FFmpeg's `haas` filter, which boosted the centre by +4…+6 dB and folded hard-panned material to one side.
+- Optional **binaural beat layer**: a detached `mpv` generator process feeds two pure tones (one per ear) via `aevalsrc` with a 2 s fade-in, started/stopped around playback sessions or manually (`snowfox immersion beats on`). It mixes with any player through PipeWire.
+- Profiles: `head`, `body`, `mind`, `brain`, `total` (default: `brain`, the in-head + room profile); tunables: crossfeed, body bass, virtual bass, super-stereo space, room amount, room rotation, headroom trim, beat band/frequency, carrier (400 Hz recommended), level. State lives in `~/.config/snowfox/immersion.conf`.
+- `test` renders a 16-second A/B signal with `ffmpeg` and adds live left/right/bass labels; `test raw` compares unprocessed, `test channels` is a raw hard-panned L/R check, `test beats` auditions the beat layer alone; `doctor` validates dependencies and both filter graphs; `mpv on` writes a managed include into `~/.config/mpv/mpv.conf`; `about` explains the signal path.
 
 ### `cli/desktop.sh` (`snowfox auto` / `snowfox lay` / `snowfox web`)
 - `cmd_start`: Manages autostart entries in i3 and `~/.config/autostart/`.

@@ -284,8 +284,8 @@ _gui_immersion() {
     declare -F _imm_get &>/dev/null && prof="$(_imm_get IMMERSION_PROFILE brain)"
 
     local CHOICE
-    CHOICE=$(echo -e "  Turn on\n  Turn off\n  Profile: head — out of your head\n  Profile: body — feel the bass\n  Profile: mind — binaural focus\n  Profile: brain — inside your head\n  Profile: total — everything\n  ─────────────────────────────\n  Back" \
-        | rofi -dmenu -p "🦊 Immersion ($state · $prof)" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 460 -lines 11)
+    CHOICE=$(echo -e "  Turn on\n  Turn off\n  Profile: head — out of your head\n  Profile: body — feel the bass\n  Profile: mind — binaural focus\n  Profile: brain — inside your head + room\n  Profile: total — everything\n  ─────────────────────────────\n  Test: chain (16 s)\n  Test: channels (left/right)\n  Test: beats (30 s)\n  ─────────────────────────────\n  Back" \
+        | rofi -dmenu -p "🦊 Immersion ($state · $prof)" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 460 -lines 14)
 
     [[ -z "$CHOICE" || "$CHOICE" == *"Back"* ]] && return
 
@@ -315,6 +315,12 @@ _gui_immersion() {
         *"Profile: total"*)
             _imm_profile_apply total && _imm_sync_all
             notify-send "🦊 SnowFox" "Immersion profile: total" 2>/dev/null || true ;;
+        *"Test: chain"*)
+            ( cmd_immersion test ) ;;
+        *"Test: channels"*)
+            ( cmd_immersion test channels ) ;;
+        *"Test: beats"*)
+            ( cmd_immersion test beats ) ;;
     esac
 }
 
