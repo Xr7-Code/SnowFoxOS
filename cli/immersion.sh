@@ -8,13 +8,15 @@
 #  Signal path (all processed by FFmpeg/libavfilter inside mpv
 #  in real time — nothing is re-encoded, nothing is downloaded):
 #
-#     bass ──▶ virtualbass ──▶ haas ──▶ crossfeed ──▶ alimiter
-#     │        │               │        │              │
-#     │        │               │        │              └ safety net
-#     │        │               │        └ headphone stage (out of your head)
-#     │        │               └ stereo width (space)
-#     │        └ psychoacoustic sub harmonics (feel the low end)
-#     └ low shelf (body)
+#     trim ──▶ bass ──▶ virtualbass ──▶ space ──▶ haas ──▶ crossfeed ──▶ alimiter
+#     │        │        │               │         │         │             │
+#     │        │        │               │         │         │             └ safety net
+#     │        │        │               │         │         └ headphone stage (out of your head)
+#     │        │        │               │         └ stereo width (the room)
+#     │        │        │               └ super stereo (inside your head)
+#     │        │        └ psychoacoustic sub harmonics (feel the low end)
+#     │        └ low shelf (body)
+#     └ headroom trim (keeps the limiter transparent)
 #
 #  Plus an optional binaural-beat layer: two pure tones, one per
 #  ear, whose frequency difference is the beat the brain hears.
@@ -51,15 +53,17 @@ _imm_init() {
 #  Managed by: snowfox immersion · tune with the CLI, not here
 # ============================================================
 IMMERSION_ENABLED=false
-IMMERSION_PROFILE=total
-IMMERSION_CROSSFEED=0.35
-IMMERSION_BASS=5
-IMMERSION_VB=1.2
-IMMERSION_WIDTH=1.15
+IMMERSION_PROFILE=brain
+IMMERSION_CROSSFEED=0
+IMMERSION_BASS=6
+IMMERSION_VB=0
+IMMERSION_WIDTH=1.10
+IMMERSION_SPACE=1.50
 IMMERSION_BEATS=true
 IMMERSION_BEAT=10
-IMMERSION_CARRIER=200
-IMMERSION_BEAT_VOL=0.05
+IMMERSION_CARRIER=300
+IMMERSION_BEAT_VOL=0.04
+IMMERSION_TRIM=-3.5
 IMMERSION_MPV_INCLUDE=false
 EOF
         chmod 600 "$IMM_FILE"
@@ -112,6 +116,7 @@ _imm_profile_norm() {
         head|clarity|natural|kopf|klar)      echo "head" ;;
         body|deep|bass|koerper|körper)       echo "body" ;;
         mind|focus|brains|beats|gehirn)      echo "mind" ;;
+        brain|imkopf|inkopf|schaedel|schädel) echo "brain" ;;
         total|all|full|everything|ganz)      echo "total" ;;
         *)                                   echo "$1" ;;
     esac
@@ -120,9 +125,10 @@ _imm_profile_norm() {
 _imm_profile_desc() {
     case "$1" in
         head)  echo "Headphone stage — crossfeed lifts the music out of your head" ;;
-        body)  echo "Physical bass — low shelf + psychoacoustic bass + wide stage" ;;
+        body)  echo "Physical bass — clean low shelf + wide super stereo" ;;
         mind)  echo "Binaural focus — two pure tones, one per ear, under the music" ;;
-        total) echo "Everything — crossfeed + bass + width + binaural beats" ;;
+        brain) echo "In-head — super stereo + binaural beats, no crossfeed" ;;
+        total) echo "Everything — crossfeed + bass + super stereo + binaural beats" ;;
         *)     echo "Unknown profile" ;;
     esac
 }
@@ -137,27 +143,44 @@ _imm_profile_apply() {
             _imm_set IMMERSION_BASS 0
             _imm_set IMMERSION_VB 0
             _imm_set IMMERSION_WIDTH 1.10
+            _imm_set IMMERSION_SPACE 1.00
+            _imm_set IMMERSION_TRIM 0
             _imm_set IMMERSION_BEATS false
             ;;
         body)
-            _imm_set IMMERSION_CROSSFEED 0.30
-            _imm_set IMMERSION_BASS 6
-            _imm_set IMMERSION_VB 1.5
-            _imm_set IMMERSION_WIDTH 1.20
+            _imm_set IMMERSION_CROSSFEED 0.20
+            _imm_set IMMERSION_BASS 8
+            _imm_set IMMERSION_VB 0
+            _imm_set IMMERSION_WIDTH 1.15
+            _imm_set IMMERSION_SPACE 1.10
+            _imm_set IMMERSION_TRIM -3.0
             _imm_set IMMERSION_BEATS false
             ;;
         mind)
-            _imm_set IMMERSION_CROSSFEED 0.35
+            _imm_set IMMERSION_CROSSFEED 0.25
             _imm_set IMMERSION_BASS 0
             _imm_set IMMERSION_VB 0
+            _imm_set IMMERSION_WIDTH 1.05
+            _imm_set IMMERSION_SPACE 1.10
+            _imm_set IMMERSION_TRIM 0
+            _imm_set IMMERSION_BEATS true
+            ;;
+        brain)
+            _imm_set IMMERSION_CROSSFEED 0
+            _imm_set IMMERSION_BASS 6
+            _imm_set IMMERSION_VB 0
             _imm_set IMMERSION_WIDTH 1.10
+            _imm_set IMMERSION_SPACE 1.50
+            _imm_set IMMERSION_TRIM -3.5
             _imm_set IMMERSION_BEATS true
             ;;
         total)
-            _imm_set IMMERSION_CROSSFEED 0.35
+            _imm_set IMMERSION_CROSSFEED 0.25
             _imm_set IMMERSION_BASS 5
-            _imm_set IMMERSION_VB 1.2
-            _imm_set IMMERSION_WIDTH 1.15
+            _imm_set IMMERSION_VB 0
+            _imm_set IMMERSION_WIDTH 1.10
+            _imm_set IMMERSION_SPACE 1.20
+            _imm_set IMMERSION_TRIM -1.5
             _imm_set IMMERSION_BEATS true
             ;;
         *)  return 1 ;;
@@ -171,19 +194,39 @@ _imm_profile_apply() {
 # ============================================================
 _imm_chain_af() {
     # Echoes the lavfi filter chain for --af=lavfi=[…] (may be empty)
-    local cf bass vb width
-    cf="$(_imm_get IMMERSION_CROSSFEED 0.35)"
-    bass="$(_imm_get IMMERSION_BASS 5)"
-    vb="$(_imm_get IMMERSION_VB 1.2)"
-    width="$(_imm_get IMMERSION_WIDTH 1.15)"
+    local cf bass vb width space trim
+    cf="$(_imm_get IMMERSION_CROSSFEED 0)"
+    bass="$(_imm_get IMMERSION_BASS 6)"
+    vb="$(_imm_get IMMERSION_VB 0)"
+    width="$(_imm_get IMMERSION_WIDTH 1.10)"
+    space="$(_imm_get IMMERSION_SPACE 1.50)"
+    trim="$(_imm_get IMMERSION_TRIM -3.5)"
 
     local parts=()
     _imm_gt "$bass" 0     && parts+=("bass=f=55:w=1.2:g=$bass")
-    _imm_gt "$vb" 0       && parts+=("virtualbass=cutoff=140:strength=$vb")
+    if _imm_gt "$vb" 0; then
+        # FFmpeg's virtualbass "strength" is inverted (0.5 = maximum,
+        # 3.0 = almost off). Map the user-facing value so higher = stronger.
+        local vbs
+        vbs=$(LC_ALL=C awk -v u="$vb" 'BEGIN { s = 3.5 - u; if (s < 0.5) s = 0.5; if (s > 3) s = 3; printf "%.2f", s }')
+        parts+=("virtualbass=cutoff=140:strength=$vbs")
+    fi
+    if _imm_gt "$space" 1.0; then
+        # Clean mid/side super stereo: sides ×space, centre untouched.
+        # (extrastereo behaves erratically after the bass stage; pan is exact.)
+        local a b
+        a=$(LC_ALL=C awk -v s="$space" 'BEGIN { printf "%.4f", (1 + s) / 2 }')
+        b=$(LC_ALL=C awk -v s="$space" 'BEGIN { printf "%.4f", (1 - s) / 2 }')
+        parts+=("pan=stereo|c0=${a}*c0${b}*c1|c1=${b}*c0+${a}*c1")
+    fi
     _imm_gt "$width" 1.0  && parts+=("haas=side_gain=$width:middle_source=mid")
-    _imm_gt "$cf" 0       && parts+=("crossfeed=strength=$cf:range=0.5:slope=0.5")
+    _imm_gt "$cf" 0       && parts+=("crossfeed=strength=$cf:range=0.5:slope=0.5:level_in=1")
 
     [[ ${#parts[@]} -eq 0 ]] && return 0
+    # Headroom: the boosts raise loudness; the limiter catches peaks.
+    # The trim is calibrated per profile (see _imm_profile_apply) so the
+    # limiter stays transparent on loud masters and the bass stays clean.
+    parts=("volume=${trim}dB" "${parts[@]}")
     parts+=("alimiter=limit=0.97")
 
     local IFS=,
@@ -197,7 +240,7 @@ _imm_beats_on() {
 _imm_beat_freqs() {
     # echoes "<left> <right>" carrier frequencies (beat = difference)
     local carrier beat
-    carrier="$(_imm_get IMMERSION_CARRIER 200)"
+    carrier="$(_imm_get IMMERSION_CARRIER 300)"
     beat="$(_imm_get IMMERSION_BEAT 10)"
     LC_ALL=C awk -v c="$carrier" -v b="$beat" 'BEGIN { printf "%g %g\n", c - b / 2, c + b / 2 }'
 }
@@ -206,7 +249,7 @@ _imm_beats_graph() {
     # lavfi-complex graph for the beat generator process:
     # an infinite, phase-continuous two-channel tone source.
     local vol l r
-    vol="$(_imm_get IMMERSION_BEAT_VOL 0.05)"
+    vol="$(_imm_get IMMERSION_BEAT_VOL 0.04)"
     read -r l r <<< "$(_imm_beat_freqs)"
     printf 'aevalsrc=exprs=%s*sin(2*PI*%s*t)|%s*sin(2*PI*%s*t):s=48000:c=stereo:d=86400[ao]' \
         "$vol" "$l" "$vol" "$r"
@@ -442,12 +485,13 @@ _imm_test_signal() {
     command -v ffmpeg &>/dev/null || return 1
     mkdir -p "$IMM_RUN_DIR"
     local out="$IMM_RUN_DIR/test-signal.wav"
+    local fade="afade=t=in:d=0.05,afade=t=out:st=3.95:d=0.05"
     ffmpeg -hide_banner -v error -y \
-        -f lavfi -i "anoisesrc=color=pink:amplitude=0.25:duration=4:sample_rate=48000" \
-        -f lavfi -i "aevalsrc=exprs=0.30*sin(2*PI*1000*t)|0:s=48000:c=stereo:d=4" \
-        -f lavfi -i "aevalsrc=exprs=0|0.30*sin(2*PI*1000*t):s=48000:c=stereo:d=4" \
-        -f lavfi -i "aevalsrc=exprs=0.40*sin(2*PI*45*t)|0.40*sin(2*PI*45*t):s=48000:c=stereo:d=4" \
-        -filter_complex "[0:a]aformat=channel_layouts=stereo[a0];[a0][1:a][2:a][3:a]concat=n=4:v=0:a=1[out]" \
+        -f lavfi -i "anoisesrc=color=pink:amplitude=0.20:duration=4:sample_rate=48000" \
+        -f lavfi -i "aevalsrc=exprs=0.28*sin(2*PI*1000*t)|0:s=48000:c=stereo:d=4" \
+        -f lavfi -i "aevalsrc=exprs=0|0.28*sin(2*PI*1000*t):s=48000:c=stereo:d=4" \
+        -f lavfi -i "aevalsrc=exprs=0.32*sin(2*PI*45*t)|0.32*sin(2*PI*45*t):s=48000:c=stereo:d=4" \
+        -filter_complex "[0:a]aformat=channel_layouts=stereo,$fade[a0];[1:a]$fade[a1];[2:a]$fade[a2];[3:a]$fade[a3];[a0][a1][a2][a3]concat=n=4:v=0:a=1[out]" \
         -map "[out]" "$out" &>/dev/null || return 1
     echo "$out"
 }
@@ -461,18 +505,20 @@ _imm_cmd_status() {
 
     local en prof
     en="$(_imm_enabled)"
-    prof="$(_imm_get IMMERSION_PROFILE total)"
+    prof="$(_imm_get IMMERSION_PROFILE brain)"
 
     section "State"
     bool_row "Mode" "$en" "ON" "OFF"
     row "Profile" "$prof  —  $(_imm_profile_desc "$prof")"
 
     section "Signal Path"
-    local cf bass vb width
-    cf="$(_imm_get IMMERSION_CROSSFEED 0.35)"
-    bass="$(_imm_get IMMERSION_BASS 5)"
-    vb="$(_imm_get IMMERSION_VB 1.2)"
-    width="$(_imm_get IMMERSION_WIDTH 1.15)"
+    local cf bass vb width space trim
+    cf="$(_imm_get IMMERSION_CROSSFEED 0)"
+    bass="$(_imm_get IMMERSION_BASS 6)"
+    vb="$(_imm_get IMMERSION_VB 0)"
+    width="$(_imm_get IMMERSION_WIDTH 1.10)"
+    space="$(_imm_get IMMERSION_SPACE 1.50)"
+    trim="$(_imm_get IMMERSION_TRIM -3.5)"
 
     if _imm_gt "$bass" 0; then
         row "Bass (body)" "low shelf  ${bass} dB @ 55 Hz" "$GREEN"
@@ -483,6 +529,11 @@ _imm_cmd_status() {
         row "Virtual bass" "strength ${vb} · cutoff 140 Hz" "$GREEN"
     else
         row "Virtual bass" "off"
+    fi
+    if _imm_gt "$space" 1.0; then
+        row "Super stereo" "side gain ${space} · inside your head" "$GREEN"
+    else
+        row "Super stereo" "off"
     fi
     if _imm_gt "$width" 1.0; then
         row "Stereo width" "Haas hybrid, side gain ${width}" "$GREEN"
@@ -495,6 +546,7 @@ _imm_cmd_status() {
         row "Crossfeed" "off"
     fi
     row "Limiter" "lookahead, 0.97 ceiling" "$GREEN"
+    row "Level trim" "${trim} dB · headroom (keeps the limiter transparent)"
 
     section "Brain Layer (binaural beats)"
     if [[ "$(_imm_beats_on)" == "true" ]]; then
@@ -503,7 +555,7 @@ _imm_cmd_status() {
         beat="$(_imm_get IMMERSION_BEAT 10)"
         row "Beats" "on — ${beat} Hz difference" "$GREEN"
         row "Carrier" "${l} Hz left · ${r} Hz right"
-        row "Level" "amplitude $(_imm_get IMMERSION_BEAT_VOL 0.05)"
+        row "Level" "amplitude $(_imm_get IMMERSION_BEAT_VOL 0.04)"
     else
         row "Beats" "off"
     fi
@@ -550,7 +602,7 @@ _imm_cmd_on() {
     if [[ -n "${1:-}" ]]; then
         if ! _imm_profile_apply "$1"; then
             err "Unknown profile: $1"
-            info "  Profiles: head · body · mind · total"
+            info "  Profiles: head · body · mind · brain · total"
             exit 1
         fi
     fi
@@ -574,7 +626,7 @@ _imm_cmd_on() {
     _imm_sync_all
 
     echo ""
-    ok "Immersion mode ON — profile: $(_imm_get IMMERSION_PROFILE total)"
+    ok "Immersion mode ON — profile: $(_imm_get IMMERSION_PROFILE brain)"
     row "Chain" "$(_imm_describe_chain)"
     local otype
     otype="$(_imm_output_type)"
@@ -636,8 +688,8 @@ _imm_describe_chain() {
 _imm_cmd_profiles() {
     header "Immersion Profiles"
     local p
-    for p in head body mind total; do
-        if [[ "$p" == "$(_imm_get IMMERSION_PROFILE total)" ]]; then
+    for p in head body mind brain total; do
+        if [[ "$p" == "$(_imm_get IMMERSION_PROFILE brain)" ]]; then
             row "$p" "$(_imm_profile_desc "$p")" "$GREEN"
         else
             row "$p" "$(_imm_profile_desc "$p")"
@@ -656,11 +708,11 @@ _imm_cmd_profile() {
     fi
     if ! _imm_profile_apply "$name"; then
         err "Unknown profile: $name"
-        info "  Profiles: head · body · mind · total"
+        info "  Profiles: head · body · mind · brain · total"
         exit 1
     fi
     _imm_sync_all
-    ok "Profile: $(_imm_get IMMERSION_PROFILE total) — $(_imm_profile_desc "$(_imm_get IMMERSION_PROFILE total)")"
+    ok "Profile: $(_imm_get IMMERSION_PROFILE brain) — $(_imm_profile_desc "$(_imm_get IMMERSION_PROFILE brain)")"
     if [[ "$(_imm_enabled)" != "true" ]]; then
         info "  Enabled? snowfox immersion on"
     fi
@@ -687,7 +739,9 @@ _imm_cmd_tune() {
         header "Tune Immersion"
         row "crossfeed" "0 – 1        headphone stage strength"
         row "bass"      "0 – 12 dB    low shelf (0 = off)"
-        row "vb"        "0 – 3        psychoacoustic bass (0 = off)"
+        row "vb"        "0 / 0.5 – 3  psychoacoustic bass · higher = stronger"
+        row "space"     "1 – 2        super stereo · inside your head (1 = off)"
+        row "trim"      "-12 – +6 dB  headroom (lower = more limiter space)"
         row "width"     "1 – 1.6      stereo width (1 = off)"
         row "beats"     "on|off|band|Hz   binaural layer"
         row "carrier"   "40 – 500 Hz  binaural carrier tone"
@@ -707,11 +761,25 @@ _imm_cmd_tune() {
             _imm_is_num "$val" 0 12 || { err "bass must be 0 – 12 dB"; exit 1; }
             _imm_set IMMERSION_BASS "$val" ;;
         vb)
-            _imm_is_num "$val" 0 3 || { err "vb must be 0 – 3"; exit 1; }
+            if ! _imm_is_num "$val" 0 3 || \
+               ! LC_ALL=C awk -v v="$val" 'BEGIN { exit !(v == 0 || v >= 0.5) }'; then
+                err "vb must be 0 (off) or 0.5 – 3 (higher = stronger)"
+                exit 1
+            fi
             _imm_set IMMERSION_VB "$val" ;;
         width)
             _imm_is_num "$val" 1 1.6 || { err "width must be 1 – 1.6"; exit 1; }
             _imm_set IMMERSION_WIDTH "$val" ;;
+        space)
+            _imm_is_num "$val" 1 2 || { err "space must be 1 – 2"; exit 1; }
+            _imm_set IMMERSION_SPACE "$val" ;;
+        trim)
+            if ! [[ "$val" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || \
+               ! LC_ALL=C awk -v v="$val" 'BEGIN { exit !(v >= -12 && v <= 6) }'; then
+                err "trim must be -12 – +6 dB"
+                exit 1
+            fi
+            _imm_set IMMERSION_TRIM "$val" ;;
         beats)
             case "$val" in
                 on|true|yes)   _imm_set IMMERSION_BEATS true ;;
@@ -736,7 +804,7 @@ _imm_cmd_tune() {
             _imm_set IMMERSION_BEAT_VOL "$val" ;;
         *)
             err "Unknown key: $key"
-            info "  Keys: crossfeed · bass · vb · width · beats · carrier · beatvol"
+            info "  Keys: crossfeed · bass · vb · space · trim · width · beats · carrier · beatvol"
             exit 1 ;;
     esac
 
@@ -915,7 +983,7 @@ _imm_cmd_test() {
         warn "RAW mode — no immersion processing (for A/B comparison)."
     else
         if [[ "$(_imm_enabled)" == "true" ]]; then
-            ok "Playing through immersion mode, profile: $(_imm_get IMMERSION_PROFILE total)"
+            ok "Playing through immersion mode, profile: $(_imm_get IMMERSION_PROFILE brain)"
         else
             warn "Immersion mode is OFF — playing the configured chain for this test anyway."
         fi
@@ -957,35 +1025,50 @@ _imm_cmd_about() {
   notices this and places the band inside your skull. Real speakers
   always bleed into both ears. Crossfeed (Bauer / bs2b style) mixes a
   little of L into R and vice versa, delayed and low-passed — the
-  stage moves in front of you and long sessions hurt less.${RESET}
+  stage moves in front of you and long sessions hurt less.
+  Want the opposite — music INSIDE the head? Use the 'brain' profile,
+  which turns crossfeed off.${RESET}
 
-  ${LPURPLE}${BOLD}2 · Low shelf + virtual bass — the body channel${RESET}
+  ${LPURPLE}${BOLD}2 · Low shelf — the body channel${RESET}
   ${DGRAY}Below ~80 Hz you feel more than you hear. A low shelf lifts that
-  region; the psychoacoustic bass generator adds harmonics that your
-  ear places back at the missing fundamental. Result: chest and gut
-  bass on hardware that cannot physically produce 40 Hz.${RESET}
+  region, cleanly and without distortion — chest and gut bass even on
+  headphones. The optional virtual bass adds harmonics that the ear
+  places back at the missing fundamental; off by default because it
+  can sound fuzzy (enable: tune vb 1.5).${RESET}
 
-  ${LPURPLE}${BOLD}3 · Haas widening — the room${RESET}
+  ${LPURPLE}${BOLD}3 · Super stereo — the inside-your-head stage${RESET}
+  ${DGRAY}The side signal (what the two ears don't share) creates width and
+  in-head focus. A clean mid/side matrix raises it: the centre stays
+  exactly where it is, the sides press against your ears. This is the
+  stage that pins music INSIDE the head.${RESET}
+    ${DGRAY}Knob: tune space 1.0 (off) … 2.0 (extreme)${RESET}
+
+  ${LPURPLE}${BOLD}4 · Haas widening — the room${RESET}
   ${DGRAY}A few milliseconds of delay between the channels (side gain)
   widens the stereo image — more space between the instruments,
   without hollowing out the centre.${RESET}
 
-  ${LPURPLE}${BOLD}4 · Binaural beats — the brain channel${RESET}
+  ${LPURPLE}${BOLD}5 · Binaural beats — the brain channel${RESET}
   ${DGRAY}Each ear receives a pure tone; the difference between them is the
-  beat (e.g. 200 Hz left / 210 Hz right = 10 Hz alpha). The beat is
+  beat (e.g. 295 Hz left / 305 Hz right = 10 Hz alpha). The beat is
   not in the air — it is created in the brainstem when the two tone
   streams meet. Alpha relates to calm focus.${RESET}
     ${DGRAY}delta 0.5 – 4 Hz  deep sleep   ·  theta 4 – 8 Hz  drifting
     alpha 8 – 12 Hz  calm focus  ·  beta 13 – 30 Hz  alert
     gamma 30+ Hz     high attention${RESET}
 
-  ${LPURPLE}${BOLD}5 · Limiter — the safety net${RESET}
+  ${LPURPLE}${BOLD}6 · Limiter + trim — the safety net${RESET}
   ${DGRAY}A lookahead limiter catches peaks caused by the boosts, so the
-  chain cannot clip, no matter how loud the source is.${RESET}
+  chain cannot clip. A small headroom trim in front keeps the output
+  the same loudness as the raw signal — loud masters stay clean
+  instead of pumping into the limiter.${RESET}
 
   ${PURPLE}${BOLD}Good to know${RESET}
   ${DGRAY}· Beats need headphones — on speakers both ears hear both tones
     and the effect mostly collapses into a flutter.
+  · Too hissy? Keep width ≤ 1.15 and space moderate — side boosts
+    amplify hiss and lossy artefacts; lowering beatvol helps too.
+  · brain is the default profile; push it further with tune space 1.7.
   · Effects are subtle by design: they should survive long
     sessions, not shout at you.
   · Binaural beats are researched but not settled science — they are
@@ -1005,12 +1088,12 @@ EOF
 # ============================================================
 _imm_cmd_reset() {
     _imm_init
-    _imm_profile_apply total || true
+    _imm_profile_apply brain || true
     _imm_set IMMERSION_BEAT 10
-    _imm_set IMMERSION_CARRIER 200
-    _imm_set IMMERSION_BEAT_VOL 0.05
+    _imm_set IMMERSION_CARRIER 300
+    _imm_set IMMERSION_BEAT_VOL 0.04
     _imm_sync_all
-    ok "Immersion settings back to defaults (profile: total)."
+    ok "Immersion settings back to defaults (profile: brain)."
 }
 
 _imm_cmd_doctor() {
@@ -1087,8 +1170,8 @@ _imm_cmd_help() {
     row "off"            "disable · restores the raw signal"
     row "toggle"         "flip the state"
     row "status"         "full state overview"
-    row "profile <name>" "head · body · mind · total"
-    row "tune <key> <v>" "crossfeed bass vb width beats carrier beatvol"
+    row "profile <name>" "head · body · mind · brain · total"
+    row "tune <key> <v>" "crossfeed bass vb space trim width beats carrier beatvol"
     row "beats <on|off>" "manual brain layer for any player"
     row "test [raw]"     "16 s A/B test signal"
     row "mpv <on|off>"   "apply the chain to every mpv start (opt-in)"

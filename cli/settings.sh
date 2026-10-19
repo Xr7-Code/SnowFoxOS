@@ -112,10 +112,10 @@ cmd_settings_overview() {
 
     # ── Audio ────────────────────────────────────────────────
     section "Audio"
-    local imm_state="false" imm_prof="total"
+    local imm_state="false" imm_prof="brain"
     if declare -F _imm_enabled &>/dev/null; then
         imm_state="$(_imm_enabled)"
-        imm_prof="$(_imm_get IMMERSION_PROFILE total)"
+        imm_prof="$(_imm_get IMMERSION_PROFILE brain)"
     fi
     if [[ "$imm_state" == "true" ]]; then
         bool_row "Immersion" true "on · profile: $imm_prof"
@@ -279,13 +279,13 @@ _gui_bluetooth() {
 
 _gui_immersion() {
     local ROFI_THEME="$HOME/.config/rofi/config.rasi"
-    local state="false" prof="total"
+    local state="false" prof="brain"
     declare -F _imm_enabled &>/dev/null && state="$(_imm_enabled)"
-    declare -F _imm_get &>/dev/null && prof="$(_imm_get IMMERSION_PROFILE total)"
+    declare -F _imm_get &>/dev/null && prof="$(_imm_get IMMERSION_PROFILE brain)"
 
     local CHOICE
-    CHOICE=$(echo -e "  Turn on\n  Turn off\n  Profile: head — out of your head\n  Profile: body — feel the bass\n  Profile: mind — binaural focus\n  Profile: total — everything\n  ─────────────────────────────\n  Back" \
-        | rofi -dmenu -p "🦊 Immersion ($state · $prof)" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 460 -lines 10)
+    CHOICE=$(echo -e "  Turn on\n  Turn off\n  Profile: head — out of your head\n  Profile: body — feel the bass\n  Profile: mind — binaural focus\n  Profile: brain — inside your head\n  Profile: total — everything\n  ─────────────────────────────\n  Back" \
+        | rofi -dmenu -p "🦊 Immersion ($state · $prof)" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 460 -lines 11)
 
     [[ -z "$CHOICE" || "$CHOICE" == *"Back"* ]] && return
 
@@ -309,6 +309,9 @@ _gui_immersion() {
         *"Profile: mind"*)
             _imm_profile_apply mind && _imm_sync_all
             notify-send "🦊 SnowFox" "Immersion profile: mind" 2>/dev/null || true ;;
+        *"Profile: brain"*)
+            _imm_profile_apply brain && _imm_sync_all
+            notify-send "🦊 SnowFox" "Immersion profile: brain" 2>/dev/null || true ;;
         *"Profile: total"*)
             _imm_profile_apply total && _imm_sync_all
             notify-send "🦊 SnowFox" "Immersion profile: total" 2>/dev/null || true ;;

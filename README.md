@@ -206,7 +206,7 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 - **picom** — compositor with rounded corners and soft shadows (fading disabled for stability)
 - **Zen Browser** — privacy-focused browser based on Firefox (optional)
 - **PipeWire** — modern audio stack with WirePlumber
-- **Immersion Mode** — `snowfox immersion on` turns listening into a physical experience: headphone crossfeed, psychoacoustic sub-bass, Haas widening and a binaural-beat brain layer — all real-time, local DSP in mpv (no re-encoding)
+- **Immersion Mode** — `snowfox immersion on` turns listening into a physical experience: in-head super stereo, headphone crossfeed, psychoacoustic sub-bass, Haas widening and a binaural-beat brain layer — all real-time, local DSP in mpv (no re-encoding)
 - **Dunst** — notification daemon, tuned to the SnowFox palette
 - **Clip-Saver** — keeps clipboard contents active even after closing the source window (`clipnotify` + `xclip`, no history bloat)
 - **Flameshot** — screenshot tool with area selection and annotation (replaces GIMP for the standard workflow)
@@ -268,37 +268,40 @@ For comparison (community benchmarks, `free -h` `used` value — not directly co
 | Command | Description |
 |---|---|
 | `snowfox music` | Gum music TUI: search, stream and playlists (YT Music, Spotify, SoundCloud) |
-| `snowfox immersion [on\|off]` | Deep-listening DSP: crossfeed, body bass, binaural beats |
+| `snowfox immersion [on\|off]` | Deep-listening DSP: body bass, in-head super stereo, crossfeed, binaural beats |
 | `snowfox stream <search\|URL>` | Stream video/audio directly in mpv — no browser, no tracking |
 | `snowfox dl <URL>` | Download video or audio |
 | `snowfox fetch <URL>` | High-speed download via 16 parallel connections |
 
 ### Immersion Mode — Deep Listening
 
-`snowfox immersion on` activates a real-time DSP chain for everything SnowFox plays (`snowfox music`, `snowfox stream`). Four stages, each aimed at a different part of the experience:
+`snowfox immersion on` activates a real-time DSP chain for everything SnowFox plays (`snowfox music`, `snowfox stream`). Five stages, each aimed at a different part of the experience:
 
 | Stage | Technology | What it does |
 |---|---|---|
-| **Head** | Bauer/bs2b-style crossfeed | Mixes a delayed, low-passed part of L into R and vice versa — the band steps out of your skull and long sessions stop hurting |
-| **Body** | Low shelf + psychoacoustic virtual bass | Lifts the sub range and synthesizes harmonics that the ear places back at the missing fundamental — chest bass on hardware that cannot play 40 Hz |
-| **Space** | Haas stereo enhancer | A few milliseconds of side delay widen the stage without hollowing out the centre |
-| **Brain** | Two pure tones, one per ear | The difference frequency (e.g. 200 Hz left / 210 Hz right) is not in the air — the brainstem creates the beat |
+| **Body** | Low shelf (+ optional virtual bass) | Lifts the sub range cleanly — chest bass even on headphones; `tune vb` adds psychoacoustic harmonics if you want more (off by default — can sound fuzzy) |
+| **Space (in-head)** | Mid/side super stereo | Raises the side signal without touching the centre — the stage that pins music *inside* the head (`tune space`) |
+| **Room** | Haas stereo enhancer | A few milliseconds of side delay widen the stage without hollowing out the centre |
+| **Head (out-of-head)** | Bauer/bs2b-style crossfeed | Mixes a delayed, low-passed part of L into R and vice versa — the band steps out of your skull and long sessions stop hurting; the `brain` profile turns it off |
+| **Brain** | Two pure tones, one per ear | The difference frequency (e.g. 295 Hz left / 305 Hz right) is not in the air — the brainstem creates the beat |
 
-Profiles: **head** (crossfeed only) · **body** (bass + space) · **mind** (beats + crossfeed) · **total** (everything, default).
+Profiles: **head** (crossfeed only) · **body** (clean bass + space) · **mind** (beats, gentle) · **brain** (in-head: super stereo + beats, no crossfeed — **default**) · **total** (everything).
 
 ```bash
 snowfox immersion on               # enable with the current profile
-snowfox immersion on body          # enable + choose a profile
+snowfox immersion on brain         # enable + choose a profile ("directly in my head", default)
 snowfox immersion status           # state, chain, output, beat layer
 snowfox immersion test             # 16 s A/B test signal
 snowfox immersion test raw         # same signal without processing
-snowfox immersion tune bass 7      # fine-tune crossfeed, bass, width, beats
+snowfox immersion tune space 1.5   # fine-tune crossfeed, bass, vb, space, trim, width, beats
 snowfox immersion about            # the science, briefly
 ```
 
-The beat frequency follows the classic EEG bands: **delta** 2.5 Hz (deep sleep), **theta** 6 Hz (drifting), **alpha** 10 Hz (calm focus), **SMR** 13.5 Hz, **beta** 18 Hz (alert), **gamma** 40 Hz (high attention). Default: 200 Hz carrier, 10 Hz difference, gentle amplitude — made for long sessions.
+The beat frequency follows the classic EEG bands: **delta** 2.5 Hz (deep sleep), **theta** 6 Hz (drifting), **alpha** 10 Hz (calm focus), **SMR** 13.5 Hz, **beta** 18 Hz (alert), **gamma** 40 Hz (high attention). Default: 300 Hz carrier, 10 Hz difference, gentle amplitude — made for long sessions.
 
-Binaural beats need headphones. The optional `snowfox immersion mpv on` applies the DSP chain to every mpv start via `~/.config/mpv/mpv.conf` (the beat layer stays out of it, so video files without audio keep working). Everything runs locally in raw FFmpeg filter graphs (audio-only `--af`/`lavfi-complex`), at well under 1 % of one CPU core — no network, no telemetry, no re-encoding, and the limiter guarantees no clipping.
+**If something sounds off:** `tune width 1.0` stops side-boost hiss · `tune space 1.2` calms the in-head effect · `tune bass 4` softens the body · `tune trim -5` adds limiter headroom · `tune vb 1.5` adds harmonic sub-bass if you want more (off by default — can sound fuzzy) · `tune beats off` kills the brain layer. Each profile carries its own headroom trim, so the limiter stays transparent on loud masters.
+
+Binaural beats need headphones. The optional `snowfox immersion mpv on` applies the DSP chain to every mpv start via `~/.config/mpv/mpv.conf` (the beat layer stays out of it, so video files without audio keep working). Everything runs locally in raw FFmpeg filter graphs (audio-only `--af`/`lavfi-complex`), at well under 1 % of one CPU core — no network, no telemetry, no re-encoding, and the limiter plus headroom trim guarantee clean output.
 
 ### Software (Stash)
 

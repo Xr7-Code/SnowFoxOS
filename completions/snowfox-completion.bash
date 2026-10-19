@@ -57,7 +57,7 @@ _snowfox_complete() {
         music|m)
             COMPREPLY=(); return ;;
         immersion|imm)
-            COMPREPLY=( $(compgen -W "on off toggle status profiles profile tune beats test mpv show reset doctor about help head body mind total alpha theta delta beta gamma" -- "$cur") )
+            COMPREPLY=( $(compgen -W "on off toggle status profiles profile tune beats test mpv show reset doctor about help head body mind brain total alpha theta delta beta gamma space trim carrier beatvol crossfeed bass vb width" -- "$cur") )
             return ;;
         dl|download|fetch)
             COMPREPLY=(); return ;;
