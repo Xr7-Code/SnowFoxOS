@@ -146,7 +146,7 @@ _tor_start_service() {
             return 0
         fi
         sleep 1
-        ((i++))
+        i=$((i + 1))
     done
     
     err "Tor failed to open ports within 15 seconds"

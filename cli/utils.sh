@@ -70,9 +70,12 @@ hint() {
     echo -e "  ${DGRAY}  $1${RESET}"
 }
 
+# NOTE: warn/err go to STDERR on purpose. Their output must never end up
+# inside a value that is captured with $(...) — otherwise an error message
+# silently corrupts the captured data (e.g. model names, theme names).
 ok()   { echo -e "  ${GREEN}${BOLD}✓${RESET}  $1"; }
-warn() { echo -e "  ${ORANGE}${BOLD}⚠${RESET}  $1"; }
-err()  { echo -e "  ${RED}${BOLD}✗${RESET}  $1"; }
+warn() { echo -e "  ${ORANGE}${BOLD}⚠${RESET}  $1" >&2; }
+err()  { echo -e "  ${RED}${BOLD}✗${RESET}  $1" >&2; }
 info() { echo -e "  ${DGRAY}$1${RESET}"; }
 fox()  { echo -e "\n  ${LPURPLE}${BOLD}🦊  $1${RESET}\n"; }
 

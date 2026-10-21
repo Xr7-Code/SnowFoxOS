@@ -467,7 +467,13 @@ cmd_theme() {
         ""|list|ls)      cmd_theme_list ;;
         current)         theme__load_or_die || return 1; theme__current ;;
         apply|set|use)   theme__apply "${2:-}" "${@:3}" ;;
-        reset)           theme__apply "$(theme__load_or_die && echo "$THEME_DEFAULT")" "${@:2}" ;;
+        reset)
+            # Load the palette first, then resolve the default name from it.
+            # (Never capture theme__load_or_die — its diagnostics must not
+            #  become the theme name.)
+            theme__load_or_die || return 1
+            theme__apply "$THEME_DEFAULT" "${@:2]}"
+            ;;
         show|info|preview) cmd_theme_show "${2:-}" ;;
         color|colour)    cmd_theme_color "${2:-}" "${3:-}" ;;
         gui|picker)      cmd_theme_gui ;;

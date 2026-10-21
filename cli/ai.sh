@@ -45,6 +45,9 @@ _ai_ensure_running() {
 
 # ── Pick a model ─────────────────────────────────────────────
 # Returns the model name to use, or empty string if none available.
+# stdout carries ONLY the model name — diagnostics go to stderr so they
+# can never end up inside the returned value.
+# Return code: 0 = ok (name may be empty), 1 = requested model unknown.
 _ai_pick_model() {
     local requested="$1"
     local available
@@ -52,19 +55,18 @@ _ai_pick_model() {
 
     if [[ -z "$available" ]]; then
         echo ""
-        return
+        return 0
     fi
 
     # Explicit request
     if [[ -n "$requested" ]]; then
         if echo "$available" | grep -qF "$requested"; then
             echo "$requested"
-            return
+            return 0
         fi
         warn "Model '$requested' not found. Available:"
-        echo "$available" | while read -r m; do info "  $m"; done
-        echo ""
-        return
+        echo "$available" | while read -r m; do info "  $m" >&2; done
+        return 1
     fi
 
     # Auto-select: prefer llama3.2 > llama3 > first available
@@ -196,11 +198,15 @@ cmd_ai() {
 
     # ── Pick model ────────────────────────────────────────────
     local MODEL
-    MODEL=$(_ai_pick_model "$MODEL_ARG")
+    if ! MODEL=$(_ai_pick_model "$MODEL_ARG"); then
+        err "No usable model — choose one of the models listed above."
+        info "  Install one: snowfox ai pull <model>"
+        exit 1
+    fi
 
     if [[ -z "$MODEL" ]]; then
         _ai_pull_model || { $OLLAMA_WAS_RUNNING || sudo systemctl stop ollama 2>/dev/null; exit 0; }
-        MODEL=$(_ai_pick_model "")
+        MODEL=$(_ai_pick_model "") || true
         [[ -z "$MODEL" ]] && { err "No model available after pull."; exit 1; }
     fi
 
@@ -233,12 +239,19 @@ cmd_ai() {
     trap '_ai_cleanup' INT TERM
 
     while true; do
-        read -rp "$(echo -e "${CYAN}${BOLD}You: ${RESET}")" INPUT
+        # read returns non-zero on EOF (Strg+D) — without this check the
+        # empty input would loop forever and burn 100 % CPU.
+        if ! read -rp "$(echo -e "${CYAN}${BOLD}You: ${RESET}")" INPUT; then
+            echo ""
+            break
+        fi
 
         case "$INPUT" in
-            exit|quit|"")
-                [[ -z "$INPUT" ]] && continue
+            exit|quit)
                 break
+                ;;
+            "")
+                continue
                 ;;
             clear)
                 rm -f "$_AI_HISTORY_FILE"

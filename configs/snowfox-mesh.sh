@@ -93,20 +93,20 @@ _mesh_check_deps() {
 
 _mesh_find_interface() {
     local iface=""
-    
+
     # 1. iw dev
-    iface=$(iw dev 2>/dev/null | awk '$1=="Interface"{print $2}' | head -1)
-    
+    iface=$(iw dev 2>/dev/null | awk '$1=="Interface"{print $2}' | head -1) || iface=""
+
     # 2. ip link (WLAN)
     if [[ -z "$iface" ]]; then
-        iface=$(ip link show | grep -E '^[0-9]+: wl' | grep -v lo | head -1 | cut -d: -f2 | xargs)
+        iface=$(ip link show 2>/dev/null | grep -E '^[0-9]+: wl' | grep -v lo | head -1 | cut -d: -f2 | xargs) || iface=""
     fi
-    
+
     # 3. ip link (Ethernet)
     if [[ -z "$iface" ]]; then
-        iface=$(ip link show | grep -E '^[0-9]+: en' | grep -v lo | head -1 | cut -d: -f2 | xargs)
+        iface=$(ip link show 2>/dev/null | grep -E '^[0-9]+: en' | grep -v lo | head -1 | cut -d: -f2 | xargs) || iface=""
     fi
-    
+
     echo "$iface"
 }
 
@@ -120,9 +120,11 @@ _mesh_save_nm_state() {
     
     {
         echo "INTERFACE=$interface"
-        echo "NM_MANAGED=$(nmcli device show "$interface" 2>/dev/null | grep -i "managed" | awk '{print $2}' || echo "yes")"
-        echo "NM_CONNECTED=$(nmcli -t -f GENERAL.STATE device show "$interface" 2>/dev/null | cut -d: -f2 || echo "unknown")"
-        echo "NM_CONNECTION=$(nmcli -t -f GENERAL.CONNECTION device show "$interface" 2>/dev/null | cut -d: -f2 || echo "")"
+        # nmcli prints "GENERAL.MANAGED:yes" — the value is behind the
+        # colon, not behind a blank.
+        echo "NM_MANAGED=$(nmcli device show "$interface" 2>/dev/null | grep -i 'GENERAL.MANAGED' | head -n1 | cut -d: -f2 | tr -d ' ')"
+        echo "NM_CONNECTED=$(nmcli -t -f GENERAL.STATE device show "$interface" 2>/dev/null | head -n1 | cut -d: -f2)"
+        echo "NM_CONNECTION=$(nmcli -t -f GENERAL.CONNECTION device show "$interface" 2>/dev/null | head -n1 | cut -d: -f2)"
     } > "$NM_BACKUP"
     
     ok "NetworkManager-Zustand gesichert"
@@ -204,7 +206,10 @@ EOF
 _mesh_start_reticulum() {
     local interface="$1"
     local psk="$2"
-    
+    # NOTE: lora_port is optional. It MUST be declared here as well —
+    # otherwise "set -u" aborts the whole script on the first check.
+    local lora_port="${3:-}"
+
     mkdir -p "$HOME/.reticulum"
     
     # Reticulum-Config
@@ -282,7 +287,7 @@ EOF
     local kill_wait=0
     while pgrep -f "rnsd" >/dev/null 2>&1 && [[ $kill_wait -lt 5 ]]; do
         sleep 1
-        ((kill_wait++))
+        kill_wait=$((kill_wait + 1))
     done
     nohup rnsd --config "$HOME/.reticulum" >> "$MESH_DIR/mesh.log" 2>&1 &
     local rnsd_pid=$!
@@ -294,7 +299,7 @@ EOF
     local waited=0
     while ! kill -0 "$rnsd_pid" 2>/dev/null; do
         sleep 1
-        ((waited++))
+        waited=$((waited + 1))
         if [[ $waited -ge $timeout ]]; then
             err "Reticulum konnte nicht starten (Timeout nach ${timeout}s)"
             tail -20 "$MESH_DIR/mesh.log"
@@ -401,7 +406,7 @@ except OSError:
     sys.exit(1)
 " 2>/dev/null; do
         warn "Port $port bereits belegt, versuche $((port+1))..."
-        ((port++))
+        port=$((port + 1))
         if [[ $port -gt 9000 ]]; then
             err "Kein freier Port gefunden!"
             return 1
@@ -610,7 +615,7 @@ _mesh_start_dhcp() {
             break
         fi
         sleep 1
-        ((iface_wait++))
+        iface_wait=$((iface_wait + 1))
     done
     # Extra Sekunde damit Kernel das Interface stabilisiert
     sleep 1
@@ -726,15 +731,15 @@ _mesh_start() {
     
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --ssid) ssid="$2"; shift 2 ;;
-            --pass) password="$2"; shift 2 ;;
-            --lora) lora_port="$2"; shift 2 ;;
-            --iface) interface="$2"; shift 2 ;;
-            --name) node_name="$2"; shift 2 ;;
-            --type) node_type="$2"; shift 2 ;;
-            --location) node_location="$2"; shift 2 ;;
-            --mode) mode="$2"; shift 2 ;;
-            --token) web_token="$2"; shift 2 ;;
+            --ssid) ssid="${2:-}"; shift 2 ;;
+            --pass) password="${2:-}"; shift 2 ;;
+            --lora) lora_port="${2:-}"; shift 2 ;;
+            --iface) interface="${2:-}"; shift 2 ;;
+            --name) node_name="${2:-}"; shift 2 ;;
+            --type) node_type="${2:-}"; shift 2 ;;
+            --location) node_location="${2:-}"; shift 2 ;;
+            --mode) mode="${2:-}"; shift 2 ;;
+            --token) web_token="${2:-}"; shift 2 ;;
             *) shift ;;
         esac
     done
@@ -909,7 +914,7 @@ PYEOF
     fi
     chmod 600 "$MESH_PSK_FILE"
     
-    if ! _mesh_start_reticulum "$interface" "$psk"; then
+    if ! _mesh_start_reticulum "$interface" "$psk" "$lora_port"; then
         rm -f "$MESH_LOCK"
         return 1
     fi
@@ -931,14 +936,20 @@ PYEOF
     local web_pid=$!
     echo "$web_pid" > "$MESH_WEB_PID"
     
-    echo "MODE=$mode" > "$MESH_STATE"
-    echo "INTERFACE=$interface" >> "$MESH_STATE"
-    echo "SSID=$ssid" >> "$MESH_STATE"
-    echo "PASSWORD=$password" >> "$MESH_STATE"
-    echo "TOKEN=$web_token" >> "$MESH_STATE"
-    
+    # mesh.state is sourced later — every value must be quoted, otherwise
+    # "SSID=🦊 SnowFox-Mesh" is split at the first blank and breaks the
+    # whole state file.
+    {
+        printf 'MODE=%q\n'    "$mode"
+        printf 'INTERFACE=%q\n' "$interface"
+        printf 'SSID=%q\n'    "$ssid"
+        printf 'PASSWORD=%q\n' "$password"
+        printf 'TOKEN=%q\n'  "$web_token"
+    } > "$MESH_STATE"
+    chmod 600 "$MESH_STATE" 2>/dev/null || true
+
     local ip=""
-    ip=$(ip addr show "$interface" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+    ip=$(ip addr show "$interface" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1) || ip=""
     [[ -z "$ip" ]] && ip="10.42.0.1"
     
     if [[ "$mode" == "hotspot" ]] && [[ -n "$password" ]]; then
@@ -1015,7 +1026,7 @@ _mesh_status() {
     
     local ip=""
     if [[ -n "$interface" ]]; then
-        ip=$(ip addr show "$interface" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+        ip=$(ip addr show "$interface" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1) || ip=""
     fi
     echo -e "  ${GRAY}IP:         ${CYAN}${ip:-10.42.0.1}${RESET}"
     
@@ -1196,9 +1207,9 @@ PYEOF
 # ──────────────────────────────────────────────────────────────
 
 _mesh_share() {
-    local path="$1"
-    local name="$2"
-    local description="$3"
+    local path="${1:-}"
+    local name="${2:-}"
+    local description="${3:-}"
     
     if [[ -z "$path" ]] || [[ ! -e "$path" ]]; then
         err "Pfad nicht gefunden: $path"
@@ -1352,7 +1363,7 @@ PYEOF
 # ──────────────────────────────────────────────────────────────
 
 _mesh_share_all() {
-    local dir="$1"
+    local dir="${1:-}"
     
     if [[ -z "$dir" ]] || [[ ! -d "$dir" ]]; then
         err "Ordner nicht gefunden: $dir"
@@ -1368,13 +1379,13 @@ _mesh_share_all() {
     
     while IFS= read -r file; do
         if [[ -f "$file" ]]; then
-            ((count++))
+            count=$((count + 1))
             echo -ne "  Teile $count: $(basename "$file")... "
             if _mesh_share "$file" "" "Aus $dir" > /dev/null 2>&1; then
                 echo "✅"
             else
                 echo "❌"
-                ((failed++))
+                failed=$((failed + 1))
             fi
         fi
     done < <(find "$dir" -type f 2>/dev/null)
@@ -1393,7 +1404,7 @@ _mesh_share_all() {
 # ──────────────────────────────────────────────────────────────
 
 _mesh_get() {
-    local hash="$1"
+    local hash="${1:-}"
     
     if [[ -z "$hash" ]]; then
         err "Verwendung: snowfox mesh get <hash>"
@@ -1484,21 +1495,21 @@ PYEOF
 # ──────────────────────────────────────────────────────────────
 
 _mesh_gateway() {
-    local action="$1"
+    local action="${1:-}"
     local GATEWAY_STATE="$MESH_DIR/gateway.state"
     local SYSCTL_BACKUP="$MESH_DIR/sysctl.ip_forward.backup"
     local interface=""
     local wan_iface=""
-    
+
     if [[ -f "$MESH_STATE" ]]; then
         source "$MESH_STATE" 2>/dev/null || true
     fi
-    
-    if [[ -z "$INTERFACE" ]]; then
+
+    if [[ -z "${INTERFACE:-}" ]]; then
         INTERFACE=$(_mesh_find_interface)
     fi
-    
-    if [[ -z "$INTERFACE" ]]; then
+
+    if [[ -z "${INTERFACE:-}" ]]; then
         err "Kein Mesh-Interface gefunden!"
         return 1
     fi
@@ -1890,7 +1901,7 @@ PYEOF
 _mesh_write_config() {
     local psk="$1"
     local interface="$2"
-    local lora_port="$3"
+    local lora_port="${3:-}"
     
     mkdir -p "$(dirname "$RETICULUM_CFG")"
     
@@ -2105,7 +2116,7 @@ cmd_mesh() {
         status) _mesh_status ;;
         stop) _mesh_stop ;;
         nodes) _mesh_nodes ;;
-        chat) _mesh_chat ;;
+        chat) _mesh_chat "$@" ;;
         listen) _mesh_listen ;;
         share) _mesh_share "$@" ;;
         share-all) _mesh_share_all "$@" ;;

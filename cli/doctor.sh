@@ -232,7 +232,7 @@ cmd_doctor() {
                 continue
             else
                 _doc_warn "Autostart binary not found: ${BIN_BASE}"
-                ((AUTOSTART_MISSING++))
+                AUTOSTART_MISSING=$((AUTOSTART_MISSING + 1))
             fi
         done < <(grep "^exec " "$I3_CFG" 2>/dev/null)
         [[ $AUTOSTART_MISSING -eq 0 ]] && _doc_ok "Autostart entries verified"

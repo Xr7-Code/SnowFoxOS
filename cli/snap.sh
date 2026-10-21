@@ -6,6 +6,7 @@
 # ============================================================
 
 SNAP_DIR="$HOME/.config/snowfox/snapshots"
+SNOWFOX_CONFIG_DIR="$HOME/.config/snowfox"
 
 # ── Directories included in a snapshot ──────────────────────
 _SNAP_SOURCES=(
@@ -57,7 +58,23 @@ _snap_save() {
         [[ -e "$src" ]] || continue
         local dest="$snap_path$(dirname "$src")/"
         mkdir -p "$dest"
-        cp -r "$src" "$dest" 2>/dev/null && ((count++))
+
+        # ~/.config/snowfox contains the snapshot directory itself — copying
+        # it wholesale would recurse into the snapshot ("cp: cannot copy a
+        # directory into itself") and silently drop the SnowFox config.
+        # Copy entry by entry and skip "snapshots".
+        if [[ "$src" == "$SNOWFOX_CONFIG_DIR" ]]; then
+            mkdir -p "$dest/snowfox"
+            local entry
+            for entry in "$src"/*; do
+                [[ -e "$entry" ]] || continue
+                [[ "$(basename "$entry")" == "snapshots" ]] && continue
+                cp -r "$entry" "$dest/snowfox/" 2>/dev/null || true
+            done
+            count=$((count + 1))
+        else
+            cp -r "$src" "$dest" 2>/dev/null && count=$((count + 1))
+        fi
     done
 
     # Meta file
@@ -100,7 +117,7 @@ _snap_list() {
 
         printf "  ${CYAN}%-22s${RESET} %-20s ${DGRAY}%-10s %s${RESET}\n" \
             "${id}" "${label}" "${profile}" "${date}"
-        ((i++))
+        i=$((i + 1))
     done
 
     echo ""
@@ -191,17 +208,29 @@ _snap_diff() {
     header "Diff — $label vs current"
 
     local changed=0
-    (cd "$snap_path" && find . -not -name 'meta.conf' -not -type d | while read -r rel; do
-        local snap_file="$snap_path/$rel"
-        local live_file="/${rel#./}"
-        [[ -f "$live_file" ]] || { printf "  ${RED}+new${RESET}  %s\n" "${live_file}"; return; }
+    local rel snap_file live_file
+    # The loop must NOT run in a subshell — otherwise the counter is lost
+    # and the diff always reports "no differences".
+    while IFS= read -r rel; do
+        snap_file="$snap_path/$rel"
+        live_file="/${rel#./}"
+
+        if [[ ! -f "$live_file" ]]; then
+            printf "  ${RED}-missing${RESET}  %s\n" "${live_file}"
+            changed=$((changed + 1))
+            continue
+        fi
         if ! diff -q "$snap_file" "$live_file" &>/dev/null; then
             printf "  ${ORANGE}~mod${RESET}  %s\n" "${live_file}"
-            ((changed++))
+            changed=$((changed + 1))
         fi
-    done)
+    done < <(cd "$snap_path" && find . -not -name 'meta.conf' -not -type d | sort)
 
-    [[ $changed -eq 0 ]] && ok "No differences found."
+    if [[ $changed -eq 0 ]]; then
+        ok "No differences found."
+    else
+        info "$changed difference(s) between snapshot and current config."
+    fi
     echo ""
 }
 

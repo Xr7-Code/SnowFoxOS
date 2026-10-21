@@ -1385,15 +1385,15 @@ _imm_cmd_doctor() {
     section "Requirements"
     if command -v mpv &>/dev/null; then
         ok "mpv found: $(mpv --version 2>/dev/null | head -n1)"
-        ((ok_count++))
+        ok_count=$((ok_count + 1))
     else
         err "mpv missing — install: sudo apt install mpv"
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
     fi
 
     if command -v ffmpeg &>/dev/null; then
         ok "ffmpeg found: $(ffmpeg -version 2>/dev/null | head -n1 | awk '{print $1, $3}')"
-        ((ok_count++))
+        ok_count=$((ok_count + 1))
     else
         warn "ffmpeg missing — only needed for the test signal"
     fi
@@ -1404,10 +1404,10 @@ _imm_cmd_doctor() {
     row "Chain" "${af:-empty}"
     if immersion_validate; then
         ok "Chain initializes cleanly."
-        ((ok_count++))
+        ok_count=$((ok_count + 1))
     else
         err "Chain failed to initialize on this system."
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
         info "  This usually means mpv was built without libavfilter,"
         info "  or the installed FFmpeg lacks: highpass, bass, equalizer,"
         info "  pan, asplit, adelay, apulsator, amix, crossfeed, alimiter."
@@ -1416,10 +1416,10 @@ _imm_cmd_doctor() {
     if [[ "$(_imm_beats_on)" == "true" ]]; then
         if _imm_validate_beats; then
             ok "Beat generator initializes cleanly."
-            ((ok_count++))
+            ok_count=$((ok_count + 1))
         else
             err "Beat generator failed — run: snowfox immersion tune beats off"
-            ((fail_count++))
+            fail_count=$((fail_count + 1))
         fi
     else
         info "Beat layer disabled — nothing to check."

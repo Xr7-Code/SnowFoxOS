@@ -39,19 +39,36 @@ _set_source() {
 _music_src_display() {
     case "$(_get_source)" in
         ytmusic)    echo "YouTube Music" ;;
-        spotify)    echo "Spotify (via yt-dlp)" ;;
+        spotify)    echo "Spotify (via YouTube search)" ;;
         soundcloud) echo "SoundCloud" ;;
         youtube)    echo "YouTube" ;;
         *)          echo "YouTube Music" ;;
     esac
 }
 
-_music_src_prefix() {
+# ── URL-Encoding (ohne python3/jq-Abhängigkeit) ──────────────
+_music_urlencode() {
+    printf '%s' "$1" | sed -e 's/%/%25/g' -e 's/ /%20/g' -e 's/&/%26/g' \
+                         -e 's/?/%3F/g' -e 's/#/%23/g' -e 's/"/%22/g' \
+                         -e "s/'/%27/g"
+}
+
+# ── Search-Target für yt-dlp ─────────────────────────────────
+# yt-dlp kennt nur echte Search-Prefixes:
+#   ytsearch:   → YouTube
+#   scsearch:   → SoundCloud
+# Es gibt KEIN "ytsearchmusic:" und KEIN "spsearch:" (yt-dlp hat keinen
+# Spotify-Extractor). YouTube Music wird über die echte Such-URL
+# music.youtube.com/search erreicht.
+_music_search_target() {
+    # _music_search_target <query> — yt-dlp-Ziel für die aktive Quelle
+    local query="$1" enc
+    enc=$(_music_urlencode "$query")
     case "$(_get_source)" in
-        ytmusic)    echo "ytsearchmusic" ;;
-        spotify)    echo "spsearch" ;;
-        soundcloud) echo "scsearch" ;;
-        *)          echo "ytsearch" ;;
+        ytmusic)    echo "https://music.youtube.com/search?q=${enc}" ;;
+        soundcloud) echo "scsearch10:${query}" ;;
+        spotify)    echo "ytsearch10:${query}" ;;
+        *)          echo "ytsearch10:${query}" ;;
     esac
 }
 
@@ -340,9 +357,8 @@ _music_main_menu() {
 }
 
 _music_browse() {
-    local src prefix source_name
+    local src source_name
     src="$(_get_source)"
-    prefix="$(_music_src_prefix)"
     source_name="$(_music_src_display)"
 
     local query st
@@ -362,16 +378,19 @@ _music_browse() {
     local tmp
     tmp=$(mktemp)
 
+    local target
+    target=$(_music_search_target "$query")
+
     _music_spin "Searching $source_name …" \
-        bash -c 'yt-dlp --force-ipv4 --extractor-args "youtube:player_client=web,android" --print "%(title)s|%(id)s" --flat-playlist "${1}10:${2}" > "$3" 2>/dev/null' \
-        _ "$prefix" "$query" "$tmp"
+        bash -c 'yt-dlp --force-ipv4 --extractor-args "youtube:player_client=web,android" --print "%(title)s|%(id)s" --flat-playlist "$1" > "$2" 2>/dev/null' \
+        _ "$target" "$tmp"
 
     local -a results=()
     mapfile -t results < "$tmp"
 
     if [[ ${#results[@]} -eq 0 ]]; then
         _music_spin "Trying standard YouTube search …" \
-            bash -c 'yt-dlp --force-ipv4 --print "%(title)s|%(id)s" --flat-playlist "ytsearch10:${1}" > "$2" 2>/dev/null' \
+            bash -c 'yt-dlp --force-ipv4 --print "%(title)s|%(id)s" --flat-playlist "ytsearch10:$1" > "$2" 2>/dev/null' \
             _ "$query" "$tmp"
         mapfile -t results < "$tmp"
     fi
@@ -620,7 +639,7 @@ _music_source_menu() {
     local choice st
     choice=$(_music_choose "Pick a search backend" 7 \
         "🎵  YouTube Music — best music catalog (default)" \
-        "🎧  Spotify — track search via yt-dlp" \
+        "🎧  Spotify — track search via YouTube" \
         "☁️   SoundCloud — indie artists & mixes" \
         "▶️   YouTube — standard video search" \
         "↩   Back")

@@ -65,7 +65,7 @@ _audit_snapshot() {
         fi
 
         printf "  ${CYAN}%-24s${RESET} %-6s ${IP_COLOR}%s${RESET}\n" "$PROC" "$PROTO" "$IP"
-        ((count++))
+        count=$((count + 1))
     done < <(ss -tunp 2>/dev/null | tail -n +2)
 
     divider
