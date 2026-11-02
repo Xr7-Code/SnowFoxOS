@@ -2,14 +2,14 @@
 
 <img src="assets/fuchs.png" width="120" alt="SnowFox Logo"/>
 
-# SnowFoxOS v3
+# SnowFoxOS
 
 **A lean, privacy-oriented i3 desktop based on Debian 12**
 
-![Version](https://img.shields.io/badge/version-v3-9B59B6?style=flat-square)
+![Version](https://img.shields.io/badge/version-v3.2-9B59B6?style=flat-square)
 ![Debian](https://img.shields.io/badge/base-Debian%2012-A81D33?style=flat-square&logo=debian&logoColor=white)
 ![i3](https://img.shields.io/badge/desktop-i3%2FX11-3a86ff?style=flat-square)
-![License](https://img.shields.io/badge/license-SnowFox%20Public%20License-9B59B6?style=flat-square)
+![License](https://img.shields.io/badge/license-GPL--3.0-9B59B6?style=flat-square)
 
 </div>
 
@@ -547,7 +547,7 @@ grep "backend" ~/.config/picom.conf
 
 ## License
 
-SnowFoxOS is released under the **SnowFox Public License v1.0**. See [LICENSE](LICENSE).
+SnowFoxOS is released under the **GNU General Public License v3.0**. See [LICENSE](LICENSE).
 
 ---
 
