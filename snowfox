@@ -4,116 +4,208 @@
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 #  SnowFox Public License v1.0
 # ============================================================
+#
+#  Hardened rewrite:
+#   - Script path resolved via readlink -f (symlink attack resistant)
+#   - Dev fallback requires SNOWFOX_DEV=1
+#   - Every module loaded via _cli_require (missing file = fail-closed)
+#   - Post-load check: required cmd_* functions must exist
+#   - User scripts launched via _run_user_script (no bare exec)
+#   - $2/$3/$4 passed as ${N:-} to avoid empty-arg bugs
+#   - -h/--help recognized as help aliases
+#   - set -u and pipefail (no set -e: modules tolerate errors)
+#   - Absolute binary paths
+# ============================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Installed path of the CLI modules
+set -u
+set -o pipefail
+
+# ─── Controlled environment ─────────────────────────────────
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
+
+readonly UNAME_BIN="/usr/bin/uname"
+readonly READLINK_BIN="/usr/bin/readlink"
+readonly DIRNAME_BIN="/usr/bin/dirname"
+
+# ─── Resolve script path (follow symlinks) ─────────────────
+_self_path="${BASH_SOURCE[0]}"
+if [[ -x "$READLINK_BIN" ]]; then
+    _resolved=$("$READLINK_BIN" -f "$_self_path" 2>/dev/null) && _self_path="$_resolved"
+fi
+SCRIPT_DIR=$("$DIRNAME_BIN" "$_self_path")
+
+# ─── Locate CLI modules ────────────────────────────────────
 CLI_DIR="/usr/local/lib/snowfox/cli"
 
-if [[ ! -d "$CLI_DIR" || ! -f "$CLI_DIR/music.sh" || ! -f "$CLI_DIR/immersion.sh" ]]; then
-    if [[ -d "$SCRIPT_DIR/cli" ]]; then
+if [[ ! -d "$CLI_DIR" ]]; then
+    if [[ "${SNOWFOX_DEV:-0}" == "1" && -d "$SCRIPT_DIR/cli" ]]; then
         CLI_DIR="$SCRIPT_DIR/cli"
+        printf '\033[0;33m[WARN]\033[0m Using development CLI directory: %s\n' "$CLI_DIR" >&2
+    else
+        printf '\033[0;31m\033[1m[ERROR]\033[0m CLI modules not found in %s\n' "$CLI_DIR" >&2
+        printf '  Please reinstall snowfox:\n' >&2
+        printf '    sudo cp snowfox /usr/local/bin/snowfox\n' >&2
+        printf '    sudo mkdir -p /usr/local/lib/snowfox/cli\n' >&2
+        printf '    sudo cp cli/*.sh /usr/local/lib/snowfox/cli/\n' >&2
+        exit 1
     fi
 fi
 
-if [[ ! -d "$CLI_DIR" ]]; then
-    echo -e "\033[0;31m\033[1m[ERROR]\033[0m CLI modules not found in $CLI_DIR"
-    echo "  Please reinstall snowfox:"
-    echo "    sudo cp snowfox /usr/local/bin/snowfox"
-    echo "    sudo mkdir -p /usr/local/lib/snowfox/cli"
-    echo "    sudo cp cli/*.sh /usr/local/lib/snowfox/cli/"
-    exit 1
-fi
+# ─── Module loader (fail-closed) ───────────────────────────
+_cli_require() {
+    local f="$CLI_DIR/$1"
+    if [[ ! -f "$f" ]]; then
+        printf '\033[0;31m[ERROR]\033[0m Missing CLI module: %s\n' "$f" >&2
+        exit 1
+    fi
+    if [[ ! -r "$f" ]]; then
+        printf '\033[0;31m[ERROR]\033[0m Unreadable CLI module: %s\n' "$f" >&2
+        exit 1
+    fi
+    # shellcheck disable=SC1090
+    if ! source "$f"; then
+        printf '\033[0;31m[ERROR]\033[0m Failed to load: %s\n' "$f" >&2
+        exit 1
+    fi
+}
 
-# ── Load modules ─────────────────────────────────────────────
-source "$CLI_DIR/utils.sh"
-source "$CLI_DIR/status.sh"
-source "$CLI_DIR/system.sh"
-source "$CLI_DIR/hardware.sh"
-source "$CLI_DIR/media.sh"
-source "$CLI_DIR/music.sh"
-source "$CLI_DIR/immersion.sh"
-source "$CLI_DIR/security.sh"
-source "$CLI_DIR/desktop.sh"
-source "$CLI_DIR/stash.sh"
-source "$CLI_DIR/settings.sh"
-source "$CLI_DIR/theme.sh"
-source "$CLI_DIR/doctor.sh"
-source "$CLI_DIR/mesh.sh"
-source "$CLI_DIR/ai.sh"
-source "$CLI_DIR/snap.sh"
-source "$CLI_DIR/tor.sh"
-source "$CLI_DIR/help.sh"
+# ─── Load modules ──────────────────────────────────────────
+_cli_require utils.sh
+_cli_require status.sh
+_cli_require system.sh
+_cli_require hardware.sh
+_cli_require media.sh
+_cli_require music.sh
+_cli_require immersion.sh
+_cli_require security.sh
+_cli_require desktop.sh
+_cli_require stash.sh
+_cli_require settings.sh
+_cli_require theme.sh
+_cli_require doctor.sh
+_cli_require mesh.sh
+_cli_require ai.sh
+_cli_require snap.sh
+_cli_require tor.sh
+_cli_require help.sh
 
-# ── Version ──────────────────────────────────────────────────
-if [[ "$1" == "-v" ]] || [[ "$1" == "v" ]] || [[ "$1" == "version" ]]; then
-    echo "SnowFoxOS v3 (CLI v3.2.0)"
-    echo "Kernel: $(uname -r)"
-    exit 0
-fi
+# ─── Post-load sanity: required functions must exist ──────
+_required_fns=(
+    cmd_help cmd_status cmd_battery cmd_update cmd_profile cmd_doctor
+    function_reset_system cmd_gpu cmd_kill cmd_air cmd_audit cmd_tor
+    cmd_stream cmd_download cmd_fetch cmd_music cmd_immersion
+    cmd_start cmd_layout cmd_stash cmd_webapp
+    cmd_settings cmd_bluetooth cmd_keyboard cmd_language
+    cmd_timezone cmd_user cmd_defaults cmd_theme cmd_node
+    cmd_snap cmd_ai cmd_mesh_wrapper
+)
+for _fn in "${_required_fns[@]}"; do
+    if ! declare -F "$_fn" >/dev/null; then
+        printf '\033[0;31m[ERROR]\033[0m CLI module did not define %s()\n' "$_fn" >&2
+        exit 1
+    fi
+done
+unset _fn _required_fns
 
-# ── Dispatcher ───────────────────────────────────────────────
-case "$1" in
-    # ── Help ─────────────────────────────────────────────────
-    h|help|"")      cmd_help ;;
+# ─── Run a user script in $HOME/.config (no bare exec) ────
+# Never uses exec: a missing target would otherwise leave the user
+# in a dead shell. Verifies the resolved path stays under $HOME.
+_run_user_script() {
+    local name="$1"; shift
+    local script="$HOME/.config/$name"
+    if [[ ! -f "$script" ]]; then
+        err "Script not found: $script"
+        return 1
+    fi
+    if [[ ! -x "$script" ]]; then
+        err "Script not executable: $script"
+        return 1
+    fi
+    local real
+    real=$("$READLINK_BIN" -f "$script" 2>/dev/null) || real="$script"
+    case "$real" in
+        "$HOME"/*) ;;
+        *)
+            err "Refusing to run script outside \$HOME: $real"
+            return 1
+            ;;
+    esac
+    "$real" "$@"
+}
 
-    # ── System & Status ──────────────────────────────────────
+# ─── Version ──────────────────────────────────────────────
+case "${1:-}" in
+    -v|v|version)
+        printf 'SnowFoxOS v3 (CLI v3.2.0)\n'
+        printf 'Kernel: %s\n' "$("$UNAME_BIN" -r 2>/dev/null || printf 'unknown')"
+        exit 0
+        ;;
+esac
+
+# ─── Dispatcher ───────────────────────────────────────────
+case "${1:-}" in
+    # ── Help ─────────────────────────────────────────────
+    h|help|-h|--help|"")  cmd_help ;;
+
+    # ── System & Status ──────────────────────────────────
     st|status)      cmd_status ;;
     bat|battery)    cmd_battery ;;
     up|update)      cmd_update ;;
-    prof|profile)   cmd_profile "$2" ;;
+    prof|profile)   cmd_profile "${2:-}" ;;
     doc|doctor)     cmd_doctor ;;
     rst|reset)      function_reset_system ;;
 
-    # ── Hardware & Privacy ───────────────────────────────────
+    # ── Hardware & Privacy ───────────────────────────────
     gpu)            cmd_gpu ;;
-    kill)           cmd_kill "$2" ;;
-    air|airmode)    cmd_air "$2" ;;
-    audit)          cmd_audit "$2" ;;
-    tor)            cmd_tor "$2" ;;
+    kill)           cmd_kill "${2:-}" ;;
+    air|airmode)    cmd_air "${2:-}" ;;
+    audit)          cmd_audit "${2:-}" ;;
+    tor)            cmd_tor "${2:-}" ;;
 
-    # ── Media ────────────────────────────────────────────────
+    # ── Media ────────────────────────────────────────────
     stream)         cmd_stream "${@:2}" ;;
-    dl|download)    cmd_download "$2" ;;
-    fetch)          cmd_fetch "$2" ;;
+    dl|download)    cmd_download "${2:-}" ;;
+    fetch)          cmd_fetch "${2:-}" ;;
     music|m)        cmd_music ;;
-    imm|immersion)  shift; cmd_immersion "$@" ;;
+    imm|immersion)  cmd_immersion "${@:2}" ;;
 
-    # ── Desktop ──────────────────────────────────────────────
-    auto|autostart) cmd_start "$2" "$3" ;;
-    lay|layout)     cmd_layout "$2" ;;
-    stash)          shift; cmd_stash "$@" ;;
-    web|webapp)     cmd_webapp "$2" "$3" "$4" ;;
-    net|network)    exec ~/.config/snowfox-network.sh ;;
-    wall|wallpaper) exec ~/.config/snowfox-wallpaper.sh ;;
-    disp|display)   exec ~/.config/snowfox-display.sh ;;
-    lock)           exec ~/.config/snowfox-lock.sh ;;
+    # ── Desktop ──────────────────────────────────────────
+    auto|autostart) cmd_start "${2:-}" "${3:-}" ;;
+    lay|layout)     cmd_layout "${2:-}" ;;
+    stash)          cmd_stash "${@:2}" ;;
+    web|webapp)     cmd_webapp "${2:-}" "${3:-}" "${4:-}" ;;
+    net|network)    _run_user_script snowfox-network.sh ;;
+    wall|wallpaper) _run_user_script snowfox-wallpaper.sh ;;
+    disp|display)   _run_user_script snowfox-display.sh ;;
+    lock)           _run_user_script snowfox-lock.sh ;;
 
-    # ── Settings ─────────────────────────────────────────────
-    set|settings)   shift; cmd_settings "$@" ;;
-    bt|bluetooth)   cmd_bluetooth "$2" ;;
-    kb|keyboard)    cmd_keyboard "$2" ;;
-    lang|language)  cmd_language "$2" ;;
-    tz|timezone)    cmd_timezone "$2" ;;
-    user)           cmd_user "$2" "$3" ;;
-    def|defaults)   cmd_defaults "$2" "$3" ;;
+    # ── Settings ─────────────────────────────────────────
+    set|settings)   cmd_settings "${@:2}" ;;
+    bt|bluetooth)   cmd_bluetooth "${2:-}" ;;
+    kb|keyboard)    cmd_keyboard "${2:-}" ;;
+    lang|language)  cmd_language "${2:-}" ;;
+    tz|timezone)    cmd_timezone "${2:-}" ;;
+    user)           cmd_user "${2:-}" "${3:-}" ;;
+    def|defaults)   cmd_defaults "${2:-}" "${3:-}" ;;
 
-    # ── Appearance ───────────────────────────────────────────
-    theme|th)       shift; cmd_theme "$@" ;;
+    # ── Appearance ───────────────────────────────────────
+    theme|th)       cmd_theme "${@:2}" ;;
 
-    # ── Node ─────────────────────────────────────────────────
-    node)           cmd_node "$2" ;;
+    # ── Node ─────────────────────────────────────────────
+    node)           cmd_node "${2:-}" ;;
 
-    # ── Snapshots ────────────────────────────────────────────
-    snap)           shift; cmd_snap "$@" ;;
+    # ── Snapshots ────────────────────────────────────────
+    snap)           cmd_snap "${@:2}" ;;
 
-    # ── AI & Mesh ────────────────────────────────────────────
-    ai)             shift; cmd_ai "$@" ;;
-    mesh)           shift; cmd_mesh_wrapper "$@" ;;
+    # ── AI & Mesh ────────────────────────────────────────
+    ai)             cmd_ai "${@:2}" ;;
+    mesh)           cmd_mesh_wrapper "${@:2}" ;;
 
-    # ── Fallback ─────────────────────────────────────────────
+    # ── Fallback ─────────────────────────────────────────
     *)
         err "Unknown command: $1"
-        echo -e "  Help: ${CYAN}snowfox h${RESET}"
+        printf '  Help: %ssnowfox h%s\n' "${CYAN:-}" "${RESET:-}"
         exit 1
         ;;
 esac
