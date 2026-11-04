@@ -5,6 +5,37 @@ format: **Issue** → **Fix**. Append new entries at the top.
 
 ---
 
+## cli/desktop.sh — Autostart, Layout, WebApps
+
+- **`eval "$exec_cmd"` in `_webapp_open`** (arbitrary code execution from a
+  `.desktop` file) → `eval` removed; launch via `gtk-launch` with the desktop
+  ID, fallback to `xdg-open` on a re-validated URL.
+- **Unvalidated `$name`/`$url` written into `.desktop`** (desktop-file
+  injection via newline/quote) → `_valid_webapp_name()` and `_valid_url()`
+  enforced, values quoted with `_desktop_quote()` (single-quote layer per
+  desktop-entry spec).
+- **`sed` injection via `$target` in i3 config** → `_valid_program_name()`
+  whitelist, `_sed_escape()` on every interpolated value.
+- **Empty `$safe` → `rm -rf` on the whole WebApp directory** → `_webapp_slug()`
+  returns non-zero on empty result; `_webapp_remove` additionally asserts the
+  path is under `$WEBAPP_DIR`.
+- **`curl` without protocol/TLS constraints** (file://, ftp://, weak TLS) →
+  `--proto '=https' --tlsv1.2` enforced.
+- **Google favicon proxy leaked the domain** → removed; only direct
+  `https://<domain>/favicon.{ico,png}` is tried.
+- **`$url` not restricted to http(s)** (local file access via WebApp) →
+  `_valid_url()` enforces `^https?://`.
+- **`.desktop` files displayed without validation** (hidden `Exec=` lines) →
+  `desktop-file-validate` runs before display, invalid entries flagged.
+- **WebApp dirs created with default umask** → `$WEBAPP_DIR`/`$WEBAPP_ICONS`
+  forced to `0700`, `$WEBAPP_DESK` to `0755`.
+- **`update-desktop-database` assumed present** → `command -v` check before
+  invocation.
+- **`exit` in sub-commands** → `return`.
+- **`PATH` / `LD_PRELOAD` uncontrolled** → same as security.sh.
+
+---
+
 ## cli/ai.sh — Offline AI (Ollama)
 
 - **Ollama bound to non-loopback address not detected** (model exposure) →
@@ -81,29 +112,4 @@ format: **Issue** → **Fix**. Append new entries at the top.
 - **`_tor_get_uid` name-only** → `systemctl show -p MainPID` → `/proc/<pid>`
   → fallback to name.
 - **`torsocks curl` can silently fall back to cleartext** → `curl
-  --socks5-hostname` enforced, `torsocks` removed.
-- **`_tor_port_open` also matches `0.0.0.0`** → regex
-  `127\.0\.0\.1:${port}[[:space:]]`.
-- **`restart` leaves network open on failure** → `_tor_enable` calls
-  `_tor_disable` on failure (rollback).
-- **`_tor_remove_iptables` fallback `-F OUTPUT`** (everything open) → only
-  `iptables-restore` from backup; on failure the blocking state is kept.
-- **`exit` in library functions** → `return`.
-- **`PATH` / `LD_PRELOAD` uncontrolled** → same as security.sh.
-- **Status without kill-switch verification** → `iptables -S OUTPUT` policy
-  check, red if not `DROP`.
-- **`curl` result without `IsTor` check** → `"IsTor":true` verified, red
-  otherwise.
-
----
-
-## Open items (not yet fixed)
-
-- `cli/desktop.sh` — `.desktop` injection in WebApp generation (P1).
-- `cli/theme.sh` — palette value validation against config injection (P1).
-- `configs/snowfox-mesh.sh` — webserver binding, token auth, path traversal
-  (P1).
-- `configs/i3/clip-saver.sh` — clipboard timeout, sensitive sources (P1).
-- `snowfox-greeting.sh` — `/tmp` state → `$XDG_RUNTIME_DIR` (P2).
-- systemd hardening for Ollama/Tor/Mesh (P1).
-- `snowfox audit leak` as new subcommand (P2).
+  --s
