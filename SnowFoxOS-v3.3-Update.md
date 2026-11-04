@@ -5,6 +5,127 @@ format: **Issue** → **Fix**. Append new entries at the top.
 
 ---
 
+## Platform Security Notes — X11, XLibre, and Attack Surface
+
+### Wayland: intentionally deferred
+
+SnowFoxOS v3 will **not** migrate to Wayland in the foreseeable future. The
+project prioritizes the i3/X11 workflow and the ecosystem stability it
+provides. This is a conscious trade-off: X11's design allows any client to
+read the clipboard, synthesize input, and capture the screen of other
+clients. Clipboard-hijacking malware such as ClipXDaemon exploits exactly
+this property; under Wayland it does not function.
+
+### XLibre: a potential path forward
+
+XLibre is an actively maintained fork of the X.Org Server, created in June
+2025 after upstream X.Org became effectively unmaintained. Key properties
+relevant to SnowFoxOS:
+
+- **Actively maintained**: 50+ contributors, 3,600+ commits in the first
+  year, 30 releases, regular CVE backports from X.Org.
+- **Xnamespace extension**: isolates X11 clients from different security
+  domains (containers, root/user) into separate namespaces. This directly
+  addresses the "any client can talk to any client" problem that makes X11
+  clipboard hijacking trivial.
+- **Available for Debian**: community-maintained packages exist for Debian
+  and derivatives, though not yet in the official Debian archive.
+- **Drop-in replacement**: uses the same `xorg.conf` and
+  `/etc/X11/xorg.conf.d/` configuration mechanism, so SnowFoxOS's existing
+  X11 setup would carry over.
+- **Caveat**: the fork is led by a controversial figure; Fedora's proposal
+  notes this explicitly but argues that shipping maintained software
+  outweighs the governance concerns.
+
+**Recommendation for SnowFoxOS**: evaluate XLibre once it has Debian
+packaging that does not require mixing ABI-incompatible driver packages.
+The Xnamespace extension would allow SnowFoxOS to keep i3 while gaining a
+structural defense against the clipboard-hijacking class of malware.
+
+### Concrete attack paths against SnowFoxOS v3.3
+
+The following attack vectors are ordered by likelihood for a
+privacy-focused Debian/i3 desktop:
+
+1. **Clipboard hijacking (X11-specific)**: any process running as the user
+   can poll `XConvertSelection` and replace clipboard contents. No network
+   connection required, invisible to `snowfox audit`. Mitigation:
+   Xnamespace via XLibre, or careful `.desktop`/autostart auditing.
+
+2. **Supply-chain compromise of installer-fetched binaries**: `install.sh`
+   downloads `fastfetch`, `Bibata-Modern-Classic`, `JetBrainsMono`, and
+   builds `clipnotify` from source. If any upstream release is tampered
+   with, the binary lands on the system with user trust. Mitigation:
+   **mandatory SHA256 verification in the installer** (see below).
+
+3. **`.desktop` file execution**: a `.desktop` file received via email or
+   messenger that contains `Exec=bash -c 'curl ... | bash'` will execute
+   when double-clicked in PCManFM or Rofi. This is the APT36/Vibeware
+   vector. Mitigation: `snowfox doc` should flag `.desktop` files in
+   `~/Downloads` and `~/.local/share/applications` that contain shell
+   metacharacters or network tools in `Exec=`.
+
+4. **Unpatched kernel/X11 vulnerabilities**: Debian 12 does not install
+   `unattended-upgrades` by default with non-GNOME desktops. Without it,
+   security updates wait for manual `snowfox up`. Mitigation: install and
+   configure `unattended-upgrades` for security pockets in `install.sh`.
+
+5. **Credential theft by Linux RATs**: Quasar Linux RAT (2026) harvests
+   npm/PyPI/Git/AWS/SSH credentials, `.env` files, and browser data, runs
+   filelessly from memory, uses LD_PRELOAD + eBPF rootkits, and persists
+   via systemd/crontab/XDG autostart. Mitigation: AIDE baseline for
+   `/usr/bin`, `/etc`, and `~/.local/bin`; `snowfox doc` should run
+   `aide --check`.
+
+6. **Mesh module exposure**: `snowfox-mesh.sh` (deferred rewrite) runs an
+   HTTP server and dnsmasq. If bound to `0.0.0.0`, any peer on the
+   ad-hoc/hotspot network can reach the chat UI and file catalog.
+   Mitigation: bind to the mesh interface only, token auth, path-traversal
+   guard (to be implemented when the module is rewritten).
+
+---
+
+## Installer Hardening — Mandatory SHA256 Verification
+
+**Policy**: every binary fetched from an external source in `install.sh`
+must have its SHA256 checked against a value pinned in the repository
+before it is moved into place.
+
+Currently affected in `install.sh` / `lib/`:
+
+- `fastfetch` (GitHub release)
+- `Bibata-Modern-Classic` cursor theme (GitHub release)
+- `JetBrainsMono` Nerd Font (GitHub release)
+- `gum` (GitHub release, fallback path)
+- any future `curl -o` / `wget -O` download
+
+Required pattern:
+
+```bash
+_fetch_verified() {
+    local url="$1" dest="$2" expected="$3"
+    local tmp
+    tmp=$(mktemp) || return 1
+    curl -fsSL --proto '=https' --tlsv1.2 "$url" -o "$tmp" || { rm -f "$tmp"; return 1; }
+    local actual
+    actual=$(sha256sum "$tmp" | cut -d' ' -f1)
+    if [[ "$actual" != "$expected" ]]; then
+        rm -f "$tmp"
+        err "SHA256 mismatch for $url"
+        err "  expected: $expected"
+        err "  actual:   $actual"
+        return 1
+    fi
+    mv "$tmp" "$dest"
+}
+```
+
+The pinned hashes live in `lib/checksums.sh` and must be updated manually
+when a dependency is bumped. This turns the installer from "trust the
+upstream release" into "trust the pinned hash".
+
+---
+
 ## snowfox — Central CLI Dispatcher
 
 - **`$SCRIPT_DIR` fallback not symlink-resolved** (an attacker who places a
