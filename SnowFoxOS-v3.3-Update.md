@@ -112,4 +112,28 @@ format: **Issue** → **Fix**. Append new entries at the top.
 - **`_tor_get_uid` name-only** → `systemctl show -p MainPID` → `/proc/<pid>`
   → fallback to name.
 - **`torsocks curl` can silently fall back to cleartext** → `curl
-  --s
+  --socks5-hostname` enforced, `torsocks` removed.
+- **`_tor_port_open` also matches `0.0.0.0`** → regex
+  `127\.0\.0\.1:${port}[[:space:]]`.
+- **`restart` leaves network open on failure** → `_tor_enable` calls
+  `_tor_disable` on failure (rollback).
+- **`_tor_remove_iptables` fallback `-F OUTPUT`** (everything open) → only
+  `iptables-restore` from backup; on failure the blocking state is kept.
+- **`exit` in library functions** → `return`.
+- **`PATH` / `LD_PRELOAD` uncontrolled** → same as security.sh.
+- **Status without kill-switch verification** → `iptables -S OUTPUT` policy
+  check, red if not `DROP`.
+- **`curl` result without `IsTor` check** → `"IsTor":true` verified, red
+  otherwise.
+
+---
+
+## Open items (not yet fixed)
+
+- `cli/theme.sh` — palette value validation against config injection (P1).
+- `configs/snowfox-mesh.sh` — webserver binding, token auth, path traversal
+  (P1).
+- `configs/i3/clip-saver.sh` — clipboard timeout, sensitive sources (P1).
+- `snowfox-greeting.sh` — `/tmp` state → `$XDG_RUNTIME_DIR` (P2).
+- systemd hardening for Ollama/Tor/Mesh (P1).
+- `snowfox audit leak` as new subcommand (P2).
