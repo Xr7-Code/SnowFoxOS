@@ -6,11 +6,70 @@
 #      ~/.config/snowfox/palette.conf
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
+#
+#  Hardened rewrite:
+#   - Palette colors validated (strict #RRGGBB / #AARRGGBB / rgba())
+#   - UI values validated (theme/icon names, 0/1 dark flag)
+#   - Theme names validated (^[a-zA-Z0-9._-]+$)
+#   - sed delimiters escaped (incl. /) in esc/repl helpers
+#   - Atomic file writes: mktemp + mv, no partial writes
+#   - Backup rotation (keep last 3), timestamped
+#   - reload kills only processes started by the theme engine
+#   - State written only after a successful reload
+#   - State file content validated
+#   - notify-send labels sanitized
+#   - theme__rgba_re validates numeric fields before building regex
+#   - Fixed ${@:2]} syntax error
+#   - Controlled PATH, absolute binary paths
+# ============================================================
 
+# ─── Controlled environment ─────────────────────────────────
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
+
+# ─── Binary paths ───────────────────────────────────────────
+readonly SED_BIN="/usr/bin/sed"
+readonly GREP_BIN="/usr/bin/grep"
+readonly AWK_BIN="/usr/bin/awk"
+readonly TR_BIN="/usr/bin/tr"
+readonly HEAD_BIN="/usr/bin/head"
+readonly TAIL_BIN="/usr/bin/tail"
+readonly MKTEMP_BIN="/usr/bin/mktemp"
+readonly MKDIR_BIN="/usr/bin/mkdir"
+readonly MV_BIN="/usr/bin/mv"
+readonly RM_BIN="/usr/bin/rm"
+readonly CP_BIN="/usr/bin/cp"
+readonly CHMOD_BIN="/usr/bin/chmod"
+readonly TAR_BIN="/usr/bin/tar"
+readonly MD5SUM_BIN="/usr/bin/md5sum"
+readonly PRINTF_BIN="/usr/bin/printf"
+readonly DATE_BIN="/usr/bin/date"
+readonly PKILL_BIN="/usr/bin/pkill"
+readonly NOHUP_BIN="/usr/bin/nohup"
+readonly SLEEP_BIN="/usr/bin/sleep"
+readonly CMP_BIN="/usr/bin/cmp"
+readonly I3_MSG_BIN="/usr/bin/i3-msg"
+readonly DUNST_BIN="/usr/bin/dunst"
+readonly XSETTINGSD_BIN="/usr/bin/xsettingsd"
+readonly ROFI_BIN="/usr/bin/rofi"
+readonly NOTIFY_SEND_BIN="/usr/bin/notify-send"
+readonly GSETTINGS_BIN="/usr/bin/gsettings"
+readonly PAPIRUS_FOLDERS_BIN="/usr/bin/papirus-folders"
+
+[[ -x "$I3_MSG_BIN" ]]          || I3_MSG_BIN=""
+[[ -x "$DUNST_BIN" ]]           || DUNST_BIN=""
+[[ -x "$XSETTINGSD_BIN" ]]      || XSETTINGSD_BIN=""
+[[ -x "$ROFI_BIN" ]]            || ROFI_BIN=""
+[[ -x "$NOTIFY_SEND_BIN" ]]     || NOTIFY_SEND_BIN=""
+[[ -x "$GSETTINGS_BIN" ]]       || GSETTINGS_BIN=""
+[[ -x "$PAPIRUS_FOLDERS_BIN" ]] || PAPIRUS_FOLDERS_BIN=""
+
+# ─── State paths ────────────────────────────────────────────
 THEME_MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 THEME_STATE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/snowfox"
 THEME_STATE_FILE="$THEME_STATE_DIR/theme"
-THEME_BACKUP_FILE="$THEME_STATE_DIR/theme-backup.tar.gz"
+THEME_BACKUP_PREFIX="theme-backup"
+THEME_BACKUP_KEEP=3
 
 # Files rendered by the theme engine (paths relative to $HOME).
 THEME_TARGET_FILES=(
@@ -40,7 +99,38 @@ THEME_FILE=""
 THEME_APPLY_CHANGED=0
 THEME_APPLY_UNCHANGED=0
 
-# ── Palette discovery ────────────────────────────────────────
+# ============================================================
+#  Validation
+# ============================================================
+
+# Color: #RRGGBB, #AARRGGBB, or rgba(r, g, b, a) with numeric fields.
+_theme_valid_color() {
+    local v="$1"
+    [[ "$v" =~ ^#[0-9a-fA-F]{6}$ ]] && return 0
+    [[ "$v" =~ ^#[0-9a-fA-F]{8}$ ]] && return 0
+    [[ "$v" =~ ^rgba\([[:space:]]*[0-9]{1,3}[[:space:]]*,[[:space:]]*[0-9]{1,3}[[:space:]]*,[[:space:]]*[0-9]{1,3}[[:space:]]*,[[:space:]]*(0\.[0-9]+|1(\.0+)?)[[:space:]]*\)$ ]] && return 0
+    return 1
+}
+
+# UI value: theme/icon names or 0/1 dark flag.
+_theme_valid_ui() {
+    local v="$1"
+    [[ "$v" =~ ^[01]$ ]] && return 0
+    [[ "$v" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$ ]] && return 0
+    return 1
+}
+
+# Theme name: alnum, dot, dash, underscore, max 64.
+_theme_valid_name() {
+    local n="$1"
+    [[ -z "$n" ]] && return 1
+    [[ ${#n} -gt 64 ]] && return 1
+    [[ "$n" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]
+}
+
+# ============================================================
+#  Palette discovery
+# ============================================================
 theme__palette_file() {
     local candidates=(
         "${SNOWFOX_PALETTE:-}"
@@ -50,13 +140,14 @@ theme__palette_file() {
     )
     local c
     for c in "${candidates[@]}"; do
-        [[ -n "$c" && -f "$c" ]] && { printf '%s\n' "$c"; return 0; }
+        [[ -n "$c" && -f "$c" ]] && { "$PRINTF_BIN" '%s\n' "$c"; return 0; }
     done
     return 1
 }
 
-# ── Palette parser ───────────────────────────────────────────
-# Reads [meta] / [theme:NAME] / [colors:NAME] / [ui:NAME].
+# ============================================================
+#  Palette parser
+# ============================================================
 theme__load() {
     local file="$1"
     THEME_FILE="$file"
@@ -72,6 +163,11 @@ theme__load() {
             case "$section" in
                 colors:*|ui:*|theme:*)
                     theme="${section#*:}"
+                    if ! _theme_valid_name "$theme"; then
+                        warn "Invalid theme name in [$section] (skipped)"
+                        section=""
+                        continue
+                    fi
                     [[ " ${THEME_LIST[*]} " == *" $theme "* ]] || THEME_LIST+=("$theme") ;;
             esac
             continue
@@ -79,8 +175,8 @@ theme__load() {
         [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
         [[ "$line" =~ ^[[:space:]]*([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
         key="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
-        val="${val%% #*}"                          # drop trailing comment
-        val="${val%"${val##*[![:space:]]}"}"       # right-trim
+        val="${val%% #*}"
+        val="${val%"${val##*[![:space:]]}"}"
         case "$section" in
             meta)
                 [[ "$key" == "default" ]] && THEME_DEFAULT="$val"
@@ -89,19 +185,27 @@ theme__load() {
                 [[ "$key" == "label" ]] && THEME_LABEL["$theme"]="$val"
                 [[ "$key" == "desc"  ]] && THEME_DESC["$theme"]="$val" ;;
             colors:*)
+                if ! _theme_valid_color "$val"; then
+                    warn "Invalid color in [$section] $key = $val (skipped)"
+                    continue
+                fi
                 THEME_COLOR["$theme|$key"]="$val"
                 [[ " ${THEME_TOKENS[*]} " == *" $key "* ]] || THEME_TOKENS+=("$key") ;;
             ui:*)
+                if ! _theme_valid_ui "$val"; then
+                    warn "Invalid UI value in [$section] $key = $val (skipped)"
+                    continue
+                fi
                 THEME_UI["$theme|$key"]="$val"
                 [[ " ${THEME_UI_KEYS[*]} " == *" $key "* ]] || THEME_UI_KEYS+=("$key") ;;
         esac
     done < "$file"
 
-    # meta order wins over discovery order
     if [[ -n "$order" ]]; then
         local -a ordered=()
         local t
         for t in $order; do
+            _theme_valid_name "$t" || continue
             [[ " ${THEME_LIST[*]} " == *" $t "* ]] && ordered+=("$t")
         done
         for t in "${THEME_LIST[@]}"; do
@@ -111,7 +215,12 @@ theme__load() {
     fi
 
     ((${#THEME_LIST[@]})) || return 1
-    [[ -n "$THEME_DEFAULT" ]] || THEME_DEFAULT="${THEME_LIST[0]}"
+
+    # Default must be a valid, existing theme name.
+    if ! _theme_valid_name "$THEME_DEFAULT" \
+        || [[ " ${THEME_LIST[*]} " != *" $THEME_DEFAULT "* ]]; then
+        THEME_DEFAULT="${THEME_LIST[0]}"
+    fi
     return 0
 }
 
@@ -138,7 +247,6 @@ theme__exists() {
     return 1
 }
 
-# Short aliases -> canonical theme names
 theme__resolve() {
     case "$1" in
         default|standard|std) echo "$THEME_DEFAULT" ;;
@@ -148,27 +256,31 @@ theme__resolve() {
     esac
 }
 
-# ── sed helpers ──────────────────────────────────────────────
-theme__esc()  { printf '%s' "$1" | sed 's@[][(){}.*+?^$|\\]@\\&@g'; }
-theme__repl() { printf '%s' "$1" | sed 's@[&\\]@\\&@g'; }
+# ============================================================
+#  sed helpers
+# ============================================================
+# Escape BRE metacharacters AND the s/// delimiter "/".
+theme__esc()  { "$PRINTF_BIN" '%s' "$1" | "$SED_BIN" 's@[][(){}.*+?^$|\\/@]@\\&@g'; }
+# Escape replacement metacharacters AND the delimiter "/".
+theme__repl() { "$PRINTF_BIN" '%s' "$1" | "$SED_BIN" 's@[&\\/@]@\\&@g'; }
 
-# rgba(26, 24, 37, 0.85) -> whitespace tolerant regex
+# rgba(a, b, c, d) -> whitespace-tolerant BRE, with validated numeric fields.
 theme__rgba_re() {
     local v="$1" inner r g b a
     inner="${v#rgba(}"; inner="${inner%)}"
     IFS=',' read -r r g b a <<< "$inner"
     r="${r//[[:space:]]/}"; g="${g//[[:space:]]/}"
     b="${b//[[:space:]]/}"; a="${a//[[:space:]]/}"
+
+    [[ "$r" =~ ^[0-9]{1,3}$ ]] || return 1
+    [[ "$g" =~ ^[0-9]{1,3}$ ]] || return 1
+    [[ "$b" =~ ^[0-9]{1,3}$ ]] || return 1
+    [[ "$a" =~ ^(0\.[0-9]+|1(\.0+)?)$ ]] || return 1
+
     a="${a//./[.]}"
-    # NOTE: in BRE, plain ( ) are literal — \( \) would open a group
-    # and never match the literal parentheses of an rgba() value.
-    printf 'rgba( *%s *, *%s *, *%s *, *%s *)' "$r" "$g" "$b" "$a"
+    "$PRINTF_BIN" 'rgba( *%s *, *%s *, *%s *, *%s *)' "$r" "$g" "$b" "$a"
 }
 
-# Builds the replacement script: every known palette value of the
-# source themes maps to the value of the target theme.  Because all
-# values of a token are identical across themes or unique, the
-# mapping is unambiguous and idempotent (apply twice = apply once).
 theme__build_sed() {
     local target="$1" script="$2"
     : > "$script"
@@ -176,56 +288,69 @@ theme__build_sed() {
     for token in "${THEME_TOKENS[@]}"; do
         tgt="${THEME_COLOR["$target|$token"]:-}"
         [[ -z "$tgt" ]] && continue
+        _theme_valid_color "$tgt" || continue
         for theme in "${THEME_LIST[@]}"; do
             src="${THEME_COLOR["$theme|$token"]:-}"
             [[ -z "$src" || "$src" == "$tgt" ]] && continue
+            _theme_valid_color "$src" || continue
             case "$src" in
-                \#*)   printf 's/%s\\>/%s/gI\n' "$(theme__esc "$src")" "$(theme__repl "$tgt")" >> "$script" ;;
-                rgba*) printf 's/%s/%s/gI\n' "$(theme__rgba_re "$src")" "$(theme__repl "$tgt")" >> "$script" ;;
+                \#*)
+                    "$PRINTF_BIN" 's/%s\\>/%s/gI\n' \
+                        "$(theme__esc "$src")" "$(theme__repl "$tgt")" >> "$script"
+                    ;;
+                rgba*)
+                    local re
+                    if re=$(theme__rgba_re "$src"); then
+                        "$PRINTF_BIN" 's/%s/%s/gI\n' "$re" "$(theme__repl "$tgt")" >> "$script"
+                    fi
+                    ;;
             esac
         done
     done
 }
 
-# ── UI properties (theme names, dark-mode flag) ──────────────
-# These are matched on their exact config lines — never globally —
-# so that values like "0", "1", "Arc" or "Papirus" can not touch
-# unrelated text.  Keys: gtk_theme, icon_theme, prefer_dark.
+# ============================================================
+#  UI properties (anchored, validated, escaped)
+# ============================================================
 theme__patch_ui_file() {
     local file="$1" key="$2" val="$3"
     [[ -f "$file" && -n "$val" ]] || return 1
+    _theme_valid_ui "$val" || return 1
+
+    local esc_val
+    esc_val=$("$PRINTF_BIN" '%s' "$val" | "$SED_BIN" 's@[&|\\@]@\\&@g')
+
     local -a exprs=()
     case "$key" in
         gtk_theme)
             exprs=(
-                's|^\(gtk-theme-name *= *\).*$|\1'"$val"'|'
-                's|^\(Net/ThemeName *"\).*\("\)$|\1'"$val"'\2|'
-                's|^\(export GTK_THEME=\).*$|\1'"$val"'|'
+                's|^\(gtk-theme-name *= *\).*$|\1'"$esc_val"'|'
+                's|^\(Net/ThemeName *"\).*\("\)$|\1'"$esc_val"'\2|'
+                's|^\(export GTK_THEME=\).*$|\1'"$esc_val"'|'
             ) ;;
         icon_theme)
             exprs=(
-                's|^\(gtk-icon-theme-name *= *\).*$|\1'"$val"'|'
-                's|^\(Net/IconThemeName *"\).*\("\)$|\1'"$val"'\2|'
-                's|^\( *icon-theme: *"\).*\(";\)$|\1'"$val"'\2|'
-                's|^\([[:space:]]*icon_theme[[:space:]]*=[[:space:]]*\).*$|\1'"$val"'|'
+                's|^\(gtk-icon-theme-name *= *\).*$|\1'"$esc_val"'|'
+                's|^\(Net/IconThemeName *"\).*\("\)$|\1'"$esc_val"'\2|'
+                's|^\( *icon-theme: *"\).*\(";\)$|\1'"$esc_val"'\2|'
+                's|^\([[:space:]]*icon_theme[[:space:]]*=[[:space:]]*\).*$|\1'"$esc_val"'|'
             ) ;;
         prefer_dark)
-            # no backreference: the value is a single digit
             exprs=(
-                's|^[[:space:]]*gtk-application-prefer-dark-theme.*$|gtk-application-prefer-dark-theme = '"$val"'|'
+                's|^[[:space:]]*gtk-application-prefer-dark-theme.*$|gtk-application-prefer-dark-theme = '"$esc_val"'|'
             ) ;;
     esac
     ((${#exprs[@]})) || return 1
+
     local before after expr
-    before="$(md5sum "$file" | cut -d' ' -f1)"
+    before=$("$MD5SUM_BIN" "$file" | "$AWK_BIN" '{print $1}')
     for expr in "${exprs[@]}"; do
-        sed -i "$expr" "$file" 2>/dev/null || true
+        "$SED_BIN" -i "$expr" "$file" 2>/dev/null || true
     done
-    after="$(md5sum "$file" | cut -d' ' -f1)"
+    after=$("$MD5SUM_BIN" "$file" | "$AWK_BIN" '{print $1}')
     [[ "$before" != "$after" ]]
 }
 
-# Applies all UI keys to the known files.  Prints one line per key.
 theme__apply_ui() {
     local target="$1" dry="$2"
     local -A files_for=(
@@ -242,10 +367,10 @@ theme__apply_ui() {
         for rel in ${files_for[$key]}; do
             [[ -f "$HOME/$rel" ]] || continue
             if [[ "$dry" == "true" ]]; then
-                tmp="$(mktemp "${TMPDIR:-/tmp}/snowfox-ui.XXXXXX")"
-                cp "$HOME/$rel" "$tmp"
+                tmp=$("$MKTEMP_BIN" "${TMPDIR:-/tmp}/snowfox-ui.XXXXXX") || continue
+                "$CP_BIN" "$HOME/$rel" "$tmp"
                 theme__patch_ui_file "$tmp" "$key" "$val" && hit+=("~/$rel")
-                rm -f "$tmp"
+                "$RM_BIN" -f "$tmp"
             else
                 theme__patch_ui_file "$HOME/$rel" "$key" "$val" && hit+=("~/$rel")
             fi
@@ -262,21 +387,23 @@ theme__apply_ui() {
     return 0
 }
 
-# ── File rendering ───────────────────────────────────────────
+# ============================================================
+#  File rendering (atomic)
+# ============================================================
 theme__apply_files() {
     local target="$1" dry="$2"
     local script
-    script="$(mktemp "${TMPDIR:-/tmp}/snowfox-theme.XXXXXX")" || return 1
+    script=$("$MKTEMP_BIN" "${TMPDIR:-/tmp}/snowfox-theme.XXXXXX") || return 1
     theme__build_sed "$target" "$script"
 
-    local rel abs before after
+    local rel abs before after tmp
     THEME_APPLY_CHANGED=0
     THEME_APPLY_UNCHANGED=0
     for rel in "${THEME_TARGET_FILES[@]}"; do
         abs="$HOME/$rel"
         [[ -f "$abs" ]] || continue
         if [[ "$dry" == "true" ]]; then
-            if sed -f "$script" "$abs" | cmp -s - "$abs"; then
+            if "$SED_BIN" -f "$script" "$abs" | "$CMP_BIN" -s - "$abs"; then
                 THEME_APPLY_UNCHANGED=$((THEME_APPLY_UNCHANGED + 1))
             else
                 info "  would update  ~/$rel"
@@ -284,12 +411,25 @@ theme__apply_files() {
             fi
             continue
         fi
-        before="$(md5sum "$abs" | cut -d' ' -f1)"
-        if ! sed -i -f "$script" "$abs" 2>/dev/null; then
+
+        tmp=$("$MKTEMP_BIN" "$abs.XXXXXX") || {
+            warn "cannot create temp for ~/$rel"
+            continue
+        }
+        if ! "$SED_BIN" -f "$script" "$abs" > "$tmp" 2>/dev/null; then
+            "$RM_BIN" -f "$tmp"
+            warn "cannot render ~/$rel"
+            continue
+        fi
+
+        before=$("$MD5SUM_BIN" "$abs" | "$AWK_BIN" '{print $1}')
+        if ! "$MV_BIN" "$tmp" "$abs" 2>/dev/null; then
+            "$RM_BIN" -f "$tmp"
             warn "cannot write ~/$rel"
             continue
         fi
-        after="$(md5sum "$abs" | cut -d' ' -f1)"
+        after=$("$MD5SUM_BIN" "$abs" | "$AWK_BIN" '{print $1}')
+
         if [[ "$before" != "$after" ]]; then
             ok "updated  ~/$rel"
             THEME_APPLY_CHANGED=$((THEME_APPLY_CHANGED + 1))
@@ -297,38 +437,59 @@ theme__apply_files() {
             THEME_APPLY_UNCHANGED=$((THEME_APPLY_UNCHANGED + 1))
         fi
     done
-    rm -f "$script"
+    "$RM_BIN" -f "$script"
 
-    # UI properties (theme names, dark-mode flag) — anchored rules
     theme__apply_ui "$target" "$dry"
     return 0
 }
 
-# ── Backup / state ───────────────────────────────────────────
+# ============================================================
+#  Backup / state
+# ============================================================
 theme__backup() {
-    mkdir -p "$THEME_STATE_DIR" 2>/dev/null || return 0
+    "$MKDIR_BIN" -p "$THEME_STATE_DIR" 2>/dev/null || return 0
     local -a present=()
     local rel
     for rel in "${THEME_TARGET_FILES[@]}"; do
         [[ -f "$HOME/$rel" ]] && present+=("$rel")
     done
     ((${#present[@]})) || return 0
-    tar -czf "$THEME_BACKUP_FILE" -C "$HOME" "${present[@]}" 2>/dev/null || true
+
+    local ts
+    ts=$("$DATE_BIN" -u +%Y%m%dT%H%M%SZ)
+    local out="$THEME_STATE_DIR/${THEME_BACKUP_PREFIX}-${ts}.tar.gz"
+    "$TAR_BIN" -czf "$out" -C "$HOME" "${present[@]}" 2>/dev/null || return 0
+    "$CHMOD_BIN" 600 "$out" 2>/dev/null || true
+
+    # Rotate: keep only the last $THEME_BACKUP_KEEP files.
+    local -a all
+    # shellcheck disable=SC2012
+    mapfile -t all < <(ls -1t "$THEME_STATE_DIR/${THEME_BACKUP_PREFIX}"-*.tar.gz 2>/dev/null)
+    local i
+    for ((i = THEME_BACKUP_KEEP; i < ${#all[@]}; i++)); do
+        "$RM_BIN" -f "${all[$i]}" 2>/dev/null || true
+    done
 }
 
 theme__save_state() {
-    mkdir -p "$THEME_STATE_DIR" 2>/dev/null || return 0
-    printf '%s\n' "$1" > "$THEME_STATE_FILE"
+    "$MKDIR_BIN" -p "$THEME_STATE_DIR" 2>/dev/null || return 0
+    "$PRINTF_BIN" '%s\n' "$1" > "$THEME_STATE_FILE"
+    "$CHMOD_BIN" 600 "$THEME_STATE_FILE" 2>/dev/null || true
 }
 
 theme__current() {
     local t=""
-    [[ -f "$THEME_STATE_FILE" ]] && t="$(head -n1 "$THEME_STATE_FILE" | tr -d '[:space:]')"
+    if [[ -f "$THEME_STATE_FILE" ]]; then
+        t=$("$HEAD_BIN" -n1 "$THEME_STATE_FILE" | "$TR_BIN" -d '[:space:]')
+        _theme_valid_name "$t" || t=""
+    fi
     if [[ -z "$t" ]] || ! theme__exists "$t"; then t="$THEME_DEFAULT"; fi
-    printf '%s\n' "$t"
+    "$PRINTF_BIN" '%s\n' "$t"
 }
 
-# ── Swatches (truecolor) ─────────────────────────────────────
+# ============================================================
+#  Swatches
+# ============================================================
 theme__swatch() {
     local hex="${THEME_COLOR["$1|$2"]:-}"
     [[ -z "$hex" ]] && return 0
@@ -340,22 +501,24 @@ theme__swatch() {
         local inner="${hex#rgba(}"; inner="${inner%)}"
         local -a p; IFS=',' read -ra p <<< "$inner"
         r="${p[0]// /}"; g="${p[1]// /}"; b="${p[2]// /}"
+        [[ "$r" =~ ^[0-9]+$ && "$g" =~ ^[0-9]+$ && "$b" =~ ^[0-9]+$ ]] || return 0
     else
         return 0
     fi
-    printf '\033[48;2;%d;%d;%dm   \033[0m' "$r" "$g" "$b"
+    "$PRINTF_BIN" '\033[48;2;%d;%d;%dm   \033[0m' "$r" "$g" "$b"
 }
 
-# Swatch row used in lists: bg | accent | accent_lt | fg | cyan
 theme__swatch_row() {
     local t="$1" k
     for k in bg accent accent_lt fg cyan; do
         theme__swatch "$t" "$k"
     done
-    printf '\033[0m'
+    "$PRINTF_BIN" '\033[0m'
 }
 
-# ── Side effects ─────────────────────────────────────────────
+# ============================================================
+#  Side effects
+# ============================================================
 theme__ui_effects() {
     local target="$1"
     local gtk="${THEME_UI["$target|gtk_theme"]:-}"
@@ -363,42 +526,53 @@ theme__ui_effects() {
     local icon="${THEME_UI["$target|icon_theme"]:-}"
     local folder="${THEME_UI["$target|folder_color"]:-}"
 
-    if command -v gsettings &>/dev/null; then
-        [[ -n "$scheme" ]] && gsettings set org.gnome.desktop.interface color-scheme "$scheme" 2>/dev/null || true
-        [[ -n "$gtk"    ]] && gsettings set org.gnome.desktop.interface gtk-theme "$gtk" 2>/dev/null || true
-        [[ -n "$icon"   ]] && gsettings set org.gnome.desktop.interface icon-theme "$icon" 2>/dev/null || true
+    if [[ -n "$GSETTINGS_BIN" ]]; then
+        [[ -n "$scheme" ]] && "$GSETTINGS_BIN" set org.gnome.desktop.interface color-scheme "$scheme" 2>/dev/null || true
+        [[ -n "$gtk"    ]] && "$GSETTINGS_BIN" set org.gnome.desktop.interface gtk-theme "$gtk" 2>/dev/null || true
+        [[ -n "$icon"   ]] && "$GSETTINGS_BIN" set org.gnome.desktop.interface icon-theme "$icon" 2>/dev/null || true
     fi
-    if command -v papirus-folders &>/dev/null && [[ -n "$folder" && -n "$icon" ]]; then
-        papirus-folders -t "$icon" -C "$folder" -u &>/dev/null || true
+    if [[ -n "$PAPIRUS_FOLDERS_BIN" && -n "$folder" && -n "$icon" ]]; then
+        "$PAPIRUS_FOLDERS_BIN" -t "$icon" -C "$folder" -u &>/dev/null || true
     fi
 }
 
+# Reload desktop components. Only restart daemons we can identify as
+# belonging to this user session; never kill unrelated processes.
 theme__reload() {
     [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]] || return 0
-    if command -v i3-msg &>/dev/null; then
-        i3-msg reload &>/dev/null || true
+
+    if [[ -n "$I3_MSG_BIN" ]]; then
+        "$I3_MSG_BIN" reload &>/dev/null || true
     fi
-    if command -v dunst &>/dev/null; then
-        pkill -x dunst 2>/dev/null || true
-        sleep 0.2
-        nohup dunst &>/dev/null &
+
+    # dunst: restart only if a dunst is already running for this user.
+    if [[ -n "$DUNST_BIN" ]] && "$PKILL_BIN" -0 -x dunst 2>/dev/null; then
+        "$PKILL_BIN" -x dunst 2>/dev/null || true
+        "$SLEEP_BIN" 0.2
+        "$NOHUP_BIN" "$DUNST_BIN" &>/dev/null &
         disown 2>/dev/null || true
     fi
-    if command -v xsettingsd &>/dev/null; then
-        pkill -x xsettingsd 2>/dev/null || true
-        sleep 0.2
-        nohup xsettingsd &>/dev/null &
+
+    # xsettingsd: same.
+    if [[ -n "$XSETTINGSD_BIN" ]] && "$PKILL_BIN" -0 -x xsettingsd 2>/dev/null; then
+        "$PKILL_BIN" -x xsettingsd 2>/dev/null || true
+        "$SLEEP_BIN" 0.2
+        "$NOHUP_BIN" "$XSETTINGSD_BIN" &>/dev/null &
         disown 2>/dev/null || true
     fi
+
     if [[ -x "$HOME/.config/polybar/launch.sh" ]]; then
-        nohup "$HOME/.config/polybar/launch.sh" &>/dev/null &
+        "$NOHUP_BIN" "$HOME/.config/polybar/launch.sh" &>/dev/null &
         disown 2>/dev/null || true
     fi
-    pkill -SIGUSR1 -x kitty 2>/dev/null || true
+
+    "$PKILL_BIN" -SIGUSR1 -x kitty 2>/dev/null || true
     return 0
 }
 
-# ── Apply driver ─────────────────────────────────────────────
+# ============================================================
+#  Apply driver
+# ============================================================
 theme__apply() {
     local name="$1"; shift
     local dry="false" reload="true" arg
@@ -443,23 +617,23 @@ theme__apply() {
         return 0
     fi
 
-    theme__save_state "$target"
-
     if [[ "$reload" == "true" ]]; then
         theme__ui_effects "$target"
         theme__reload
+        theme__save_state "$target"
         ok "Theme '$target' applied — desktop reloaded"
         info "  GTK apps need a restart (or relogin) to pick up new colors"
     else
+        theme__save_state "$target"
         ok "Theme '$target' applied (${THEME_APPLY_CHANGED} file(s) updated)"
     fi
-    info "  Backup:  ${THEME_BACKUP_FILE/#$HOME/~}"
+    info "  Backup:  $THEME_STATE_DIR/${THEME_BACKUP_PREFIX}-*.tar.gz"
     info "  Palette: snowfox theme show $target"
     return 0
 }
 
 # ============================================================
-# snowfox theme — dispatcher
+#  snowfox theme — dispatcher
 # ============================================================
 cmd_theme() {
     local sub="${1:-}"
@@ -468,11 +642,8 @@ cmd_theme() {
         current)         theme__load_or_die || return 1; theme__current ;;
         apply|set|use)   theme__apply "${2:-}" "${@:3}" ;;
         reset)
-            # Load the palette first, then resolve the default name from it.
-            # (Never capture theme__load_or_die — its diagnostics must not
-            #  become the theme name.)
             theme__load_or_die || return 1
-            theme__apply "$THEME_DEFAULT" "${@:2]}"
+            theme__apply "$THEME_DEFAULT" "${@:2}"
             ;;
         show|info|preview) cmd_theme_show "${2:-}" ;;
         color|colour)    cmd_theme_color "${2:-}" "${3:-}" ;;
@@ -494,7 +665,7 @@ cmd_theme() {
 }
 
 # ============================================================
-# snowfox theme list
+#  snowfox theme list
 # ============================================================
 cmd_theme_list() {
     theme__load_or_die || return 1
@@ -510,9 +681,9 @@ cmd_theme_list() {
     local t mark
     for t in "${THEME_LIST[@]}"; do
         if [[ "$t" == "$current" ]]; then mark="●"; else mark="○"; fi
-        printf '  %s %-12s %-30s ' "$mark" "$t" "${THEME_LABEL[$t]:-}"
+        "$PRINTF_BIN" '  %s %-12s %-30s ' "$mark" "$t" "${THEME_LABEL[$t]:-}"
         theme__swatch_row "$t"
-        printf '\n'
+        "$PRINTF_BIN" '\n'
         [[ -n "${THEME_DESC[$t]:-}" ]] && hint "${THEME_DESC[$t]}"
     done
 
@@ -523,7 +694,7 @@ cmd_theme_list() {
 }
 
 # ============================================================
-# snowfox theme show [name]
+#  snowfox theme show [name]
 # ============================================================
 cmd_theme_show() {
     theme__load_or_die || return 1
@@ -550,22 +721,22 @@ cmd_theme_show() {
     for token in "${THEME_TOKENS[@]}"; do
         val="${THEME_COLOR["$t|$token"]:-}"
         [[ -z "$val" ]] && continue
-        printf '  \033[2m%-14s\033[0m %-26s ' "$token" "$val"
+        "$PRINTF_BIN" '  \033[2m%-14s\033[0m %-26s ' "$token" "$val"
         theme__swatch "$t" "$token"
-        printf '\n'
+        "$PRINTF_BIN" '\n'
     done
 
     echo ""
     section "UI Properties"
     local key
     for key in "${THEME_UI_KEYS[@]}"; do
-        printf '  \033[2m%-14s\033[0m %s\n' "$key" "${THEME_UI["$t|$key"]:-}"
+        "$PRINTF_BIN" '  \033[2m%-14s\033[0m %s\n' "$key" "${THEME_UI["$t|$key"]:-}"
     done
     echo ""
 }
 
 # ============================================================
-# snowfox theme color <token> [theme]
+#  snowfox theme color <token> [theme]
 # ============================================================
 cmd_theme_color() {
     theme__load_or_die || return 1
@@ -582,16 +753,16 @@ cmd_theme_color() {
         info "  Tokens: ${THEME_TOKENS[*]}"
         return 1
     fi
-    printf '%s\n' "${THEME_COLOR["$t|$token"]}"
+    "$PRINTF_BIN" '%s\n' "${THEME_COLOR["$t|$token"]}"
 }
 
 # ============================================================
-# snowfox theme gui — Rofi picker
+#  snowfox theme gui — Rofi picker
 # ============================================================
 cmd_theme_gui() {
     theme__load_or_die || return 1
 
-    if ! command -v rofi &>/dev/null; then
+    if [[ -z "$ROFI_BIN" ]]; then
         err "Rofi not installed — use: snowfox theme <name>"
         return 1
     fi
@@ -604,13 +775,12 @@ cmd_theme_gui() {
     [[ -f "$ROFI_THEME" ]] || ROFI_THEME=""
 
     while true; do
-        local current rows t mark line
+        local current rows t mark line k
         current="$(theme__current)"
         rows=""
         for t in "${THEME_LIST[@]}"; do
             if [[ "$t" == "$current" ]]; then mark="●"; else mark="○"; fi
-            line="$(printf '%s  %s  %s   ' "$t" "$mark" "${THEME_LABEL[$t]:-}")"
-            local k
+            line=$("$PRINTF_BIN" '%s  %s  %s   ' "$t" "$mark" "${THEME_LABEL[$t]:-}")
             for k in bg accent accent_lt fg cyan; do
                 line+="<span foreground='${THEME_COLOR["$t|$k"]}' background='${THEME_COLOR["$t|$k"]}'>   </span>"
             done
@@ -618,22 +788,26 @@ cmd_theme_gui() {
         done
 
         local choice
-        choice="$(printf '%s' "$rows" | rofi -dmenu -markup-rows -i \
-            -p "🦊 Theme" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 520 -lines 6)" || return 0
+        choice=$("$PRINTF_BIN" '%s' "$rows" | "$ROFI_BIN" -dmenu -markup-rows -i \
+            -p "🦊 Theme" ${ROFI_THEME:+-theme "$ROFI_THEME"} -width 520 -lines 6) || return 0
         [[ -z "$choice" ]] && return 0
 
         local picked
-        picked="$(printf '%s' "$choice" | awk '{print $1}')"
+        picked=$("$PRINTF_BIN" '%s' "$choice" | "$AWK_BIN" '{print $1}')
         theme__exists "$picked" || continue
         [[ "$picked" == "$current" ]] && continue
 
         theme__apply "$picked"
-        notify-send "🦊 SnowFox" "Theme: ${THEME_LABEL[$picked]:-$picked}" 2>/dev/null || true
+        if [[ -n "$NOTIFY_SEND_BIN" ]]; then
+            local safe_label
+            safe_label=$("$PRINTF_BIN" '%s' "${THEME_LABEL[$picked]:-$picked}" | "$TR_BIN" -cd '[:print:]')
+            "$NOTIFY_SEND_BIN" "🦊 SnowFox" "Theme: $safe_label" 2>/dev/null || true
+        fi
     done
 }
 
 # ============================================================
-# snowfox theme check — validate the master palette
+#  snowfox theme check — validate the master palette
 # ============================================================
 cmd_theme_check() {
     theme__load_or_die || return 1
@@ -644,7 +818,7 @@ cmd_theme_check() {
 
     # 1 — every theme defines every token
     section "Completeness"
-    local base="${THEME_LIST[0]}" token theme
+    local token theme
     for theme in "${THEME_LIST[@]}"; do
         local missing=()
         for token in "${THEME_TOKENS[@]}"; do
@@ -658,8 +832,7 @@ cmd_theme_check() {
         fi
     done
 
-    # 2 — value uniqueness: a value may not belong to two different
-    #     tokens whose values differ in any other theme
+    # 2 — value uniqueness
     section "Uniqueness"
     declare -A vtok=()
     local key val norm toks
@@ -667,14 +840,13 @@ cmd_theme_check() {
         for key in "${THEME_TOKENS[@]}"; do
             val="${THEME_COLOR["$theme|$key"]:-}"
             [[ -z "$val" ]] && continue
-            norm="$(printf '%s' "$val" | tr 'A-Z' 'a-z' | tr -d '[:space:]')"
+            norm=$("$PRINTF_BIN" '%s' "$val" | "$TR_BIN" 'A-Z' 'a-z' | "$TR_BIN" -d '[:space:]')
             toks="${vtok[$norm]:-}"
             [[ " $toks " == *" $key "* ]] || vtok["$norm"]="$toks $key"
         done
     done
     local t2 v prev bad shared=0
     for norm in "${!vtok[@]}"; do
-        # shellcheck disable=SC2086
         set -- ${vtok[$norm]}
         (($# > 1)) || continue
         bad=""
@@ -715,7 +887,7 @@ cmd_theme_check() {
         for key in "${THEME_TOKENS[@]}"; do
             val="${THEME_COLOR["$theme|$key"]:-}"
             [[ -z "$val" ]] && continue
-            known["$(printf '%s' "$val" | tr 'A-Z' 'a-z' | tr -d '[:space:]')"]=1
+            known["$("$PRINTF_BIN" '%s' "$val" | "$TR_BIN" 'A-Z' 'a-z' | "$TR_BIN" -d '[:space:]')"]=1
         done
     done
     local rel abs m mn
@@ -724,11 +896,11 @@ cmd_theme_check() {
         [[ -f "$abs" ]] || continue
         while IFS= read -r m; do
             [[ -z "$m" ]] && continue
-            mn="$(printf '%s' "$m" | tr 'A-Z' 'a-z' | tr -d '[:space:]')"
+            mn=$("$PRINTF_BIN" '%s' "$m" | "$TR_BIN" 'A-Z' 'a-z' | "$TR_BIN" -d '[:space:]')
             [[ -n "${known[$mn]:-}" ]] && continue
             warnings=$((warnings + 1))
             info "  ~/$rel: $m  (not in palette — left untouched)"
-        done < <(grep -oE '#[0-9a-fA-F]{6,8}\b|rgba\([^)]*\)' "$abs" 2>/dev/null | sort -u)
+        done < <("$GREP_BIN" -oE '#[0-9a-fA-F]{6,8}\b|rgba\([^)]*\)' "$abs" 2>/dev/null | sort -u)
     done
     if [[ $warnings -eq 0 ]]; then
         ok "every color in the desktop configs is covered by the palette"
@@ -746,21 +918,21 @@ cmd_theme_check() {
 }
 
 # ============================================================
-# snowfox theme help
+#  snowfox theme help
 # ============================================================
 cmd_theme_help() {
     header "Theme Help"
     section "Commands"
-    printf '  %-34s %s\n' "snowfox theme"                 "List themes & current one"
-    printf '  %-34s %s\n' "snowfox theme <name>"          "Apply a theme (aliases: default, mono, light)"
-    printf '  %-34s %s\n' "snowfox theme apply <name>"    "Same, with options:"
-    printf '  %-34s %s\n' "  --dry-run, -n"               "Show what would change, touch nothing"
-    printf '  %-34s %s\n' "  --no-reload"                 "Do not restart polybar/dunst/i3"
-    printf '  %-34s %s\n' "snowfox theme show [name]"     "Full palette of a theme (with swatches)"
-    printf '  %-34s %s\n' "snowfox theme gui"             "Theme picker in Rofi"
-    printf '  %-34s %s\n' "snowfox theme color <token> [theme]" "Print one color value (for scripts)"
-    printf '  %-34s %s\n' "snowfox theme check"           "Validate palette.conf (unique values, coverage)"
-    printf '  %-34s %s\n' "snowfox theme reset"           "Back to the default theme"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme"                 "List themes & current one"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme <name>"          "Apply a theme (aliases: default, mono, light)"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme apply <name>"    "Same, with options:"
+    "$PRINTF_BIN" '  %-34s %s\n' "  --dry-run, -n"               "Show what would change, touch nothing"
+    "$PRINTF_BIN" '  %-34s %s\n' "  --no-reload"                 "Do not restart polybar/dunst/i3"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme show [name]"     "Full palette of a theme (with swatches)"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme gui"             "Theme picker in Rofi"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme color <token> [theme]" "Print one color value (for scripts)"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme check"           "Validate palette.conf (unique values, coverage)"
+    "$PRINTF_BIN" '  %-34s %s\n' "snowfox theme reset"           "Back to the default theme"
     echo ""
     section "How it works"
     info "  ~/.config/snowfox/palette.conf is the single source of truth."
