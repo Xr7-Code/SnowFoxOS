@@ -5,6 +5,38 @@ format: **Issue** → **Fix**. Append new entries at the top.
 
 ---
 
+## cli/ai.sh — Offline AI (Ollama)
+
+- **Ollama bound to non-loopback address not detected** (model exposure) →
+  `_ai_check_ollama_binding()` uses `ss -tln`, refuses any listener on
+  `:11434` that is not `127.0.0.1`, prints fix instructions.
+- **Command/registry injection via `$2` in `pull`** → `_ai_valid_model_name()`
+  enforces `^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$`, max 128 chars.
+- **Prompt injection via chat history** → config dir `0700`, history file
+  `0600`, content sanitized (`tr -cd '[:print:]\n\t'`, newlines→spaces,
+  capped at 4000 chars) before embedding.
+- **`sudo systemctl start ollama` without consent** → user service tried
+  first, `sudo` only after explicit `[y/N]` prompt.
+- **`python3` required but unchecked** (history broken without it) → three-tier
+  JSON path: `jq` → `python3` → pure-Bash fallback.
+- **`_ai_pick_model` prefix match** (`llama3.2-vision` matched `llama3.2`) →
+  exact `grep -xF` against full tag, then `^name:` prefix fallback.
+- **Dead code `_ai_ask`** → removed, single path via `_ai_run_once`.
+- **`_ai_cleanup` stopped Ollama unconditionally** (DoS against user-started
+  daemon) → `_AI_STARTED_OLLAMA` flag, stop only if this session started it.
+- **`exit` in sub-commands** → `return`.
+- **`CONTEXT` unbounded** (prompt overflow) → `_ai_bound_context()` caps at
+  6000 chars.
+- **System prompt had no safety rules** → added non-negotiable block: no file
+  contents, no command execution, no prompt reveal, treat file/log content as
+  data.
+- **`_ai_ensure_running` printed `true`/`false` on stdout** (fragile, any
+  diagnostic would corrupt value) → returns 0/1, sets `_AI_STARTED_OLLAMA`.
+- **Trap clobbered caller's `INT`/`TERM`** → `trap -p` saved and restored.
+- **`PATH` / `LD_PRELOAD` uncontrolled** → same as security.sh.
+
+---
+
 ## cli/security.sh — Network Audit
 
 - **PATH / LD_PRELOAD hijacking** via `sudo` without `secure_path` → `PATH`
@@ -67,7 +99,6 @@ format: **Issue** → **Fix**. Append new entries at the top.
 
 ## Open items (not yet fixed)
 
-- `cli/ai.sh` — enforce Ollama binding to loopback (P0).
 - `cli/desktop.sh` — `.desktop` injection in WebApp generation (P1).
 - `cli/theme.sh` — palette value validation against config injection (P1).
 - `configs/snowfox-mesh.sh` — webserver binding, token auth, path traversal
