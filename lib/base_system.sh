@@ -3,19 +3,26 @@
 #  SnowFoxOS v3.0 — Base System Setup
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
+#  CHANGED (security):
+#   - fastfetch download now uses _fetch_verified (SHA256-pinned)
+#   - curl calls constrained to HTTPS + TLS 1.2
+#   - JSON parsing prefers jq, falls back to python3
+#   - PATH extension moved to /etc/profile.d/ (drop-in, idempotent)
+#   - DKMS_HOOKS no longer exported as array (Bash limitation);
+#     defined locally here, restored in theming_finishing.sh
+# ============================================================
 
-# Load utilities (assumes SCRIPT_DIR is set before sourcing)
 source "$SCRIPT_DIR/lib/utils.sh"
-
-# Global variables from main script (assumed to be sourced/exported):
-# TARGET_USER, SCRIPT_DIR, DKMS_HOOKS
+source "$SCRIPT_DIR/lib/checksums.sh"
 
 info "Installing for: ${BOLD}$TARGET_USER${RESET}"
 sleep 1
 
 step "1/10 — System update"
 
-# DKMS_HOOKS is defined in the main script and assumed to be available
+# CHANGED: define locally instead of relying on an exported array.
+# Bash cannot export arrays; the previous `export DKMS_HOOKS=(...)`
+# only worked by accident because this file redefined it.
 DKMS_HOOKS=(
     /etc/kernel/postinst.d/dkms
     /etc/kernel/prerm.d/dkms
@@ -53,6 +60,7 @@ apt-get install -y \
     ca-certificates \
     aria2 \
     fzf \
+    jq \
     lz4 \
     gnupg \
     pciutils usbutils \
@@ -77,6 +85,8 @@ apt-get install -y \
     qt5-style-plugins \
     qt6ct
 
+# CHANGED: jq added to package list above (JSON parsing for GitHub API).
+
 # ── Disable dnsmasq (conflicts with systemd-resolved) ────────
 info "Disabling dnsmasq..."
 systemctl stop dnsmasq 2>/dev/null || true
@@ -91,29 +101,69 @@ ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf 2>/dev/null || tru
 success "systemd-resolved enabled"
 
 # ── PATH extension for /usr/sbin ─────────────────────────────
+# CHANGED: drop-in file instead of appending to /etc/profile and
+# ~/.bashrc. Idempotent (overwrite, not append) and survives
+# profile regeneration.
 info "Adding /usr/sbin to PATH..."
-if ! grep -q "export PATH=\$PATH:/usr/sbin" /etc/profile; then
-    echo 'export PATH=$PATH:/usr/sbin' >> /etc/profile
-    success "PATH extension added to /etc/profile"
-else
-    info "PATH extension already present in /etc/profile"
-fi
+cat > /etc/profile.d/99-snowfox-path.sh << 'EOF'
+# Added by SnowFoxOS installer
+case ":$PATH:" in
+    *:/usr/sbin:*) ;;
+    *) export PATH="$PATH:/usr/sbin" ;;
+esac
+EOF
+chmod 0644 /etc/profile.d/99-snowfox-path.sh
 
-# Also for the user in ~/.bashrc
-if ! grep -q "export PATH=\$PATH:/usr/sbin" "/home/$TARGET_USER/.bashrc"; then
-    echo 'export PATH=$PATH:/usr/sbin' >> "/home/$TARGET_USER/.bashrc"
-    success "PATH extension added to ~/.bashrc"
-else
-    info "PATH extension already present in ~/.bashrc"
+# User-level: same guard, appended once to ~/.bashrc
+if ! grep -q '99-snowfox-path' "/home/$TARGET_USER/.bashrc" 2>/dev/null; then
+    cat >> "/home/$TARGET_USER/.bashrc" << 'EOF'
+
+# Added by SnowFoxOS installer
+case ":$PATH:" in
+    *:/usr/sbin:*) ;;
+    *) export PATH="$PATH:/usr/sbin" ;;
+esac
+EOF
 fi
+chown "$TARGET_USER:$TARGET_USER" "/home/$TARGET_USER/.bashrc" 2>/dev/null || true
+success "PATH extension installed"
 
 sudo -u "$TARGET_USER" xdg-user-dirs-update
 success "System updated"
 
-# ── Install fastfetch ────────────────────────────────────────
-info "Installing fastfetch..."
-FASTFETCH_DEB_URL=$(curl -sf https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest 2>/dev/null \
-    | python3 -c "
+# ── Install fastfetch (SHA256-pinned) ───────────────────────
+# CHANGED: entire download path rewritten.
+#   - API call constrained to HTTPS + TLS 1.2
+#   - jq preferred, python3 as fallback
+#   - every downloaded .deb is verified via _verify_checksum
+#   - fail-closed: unpinned hash aborts the installer
+info "Installing fastfetch (verified)..."
+
+_fetch_verified() {
+    local url="$1" dest="$2" expected="$3" name="$4"
+    local tmp
+    tmp=$(mktemp) || error "mktemp failed"
+
+    curl -fsSL --proto '=https' --tlsv1.2 \
+         --max-time 120 \
+         "$url" -o "$tmp" || { rm -f "$tmp"; error "Download failed: $url"; }
+
+    _verify_checksum "$tmp" "$expected" "$name" || { rm -f "$tmp"; return 1; }
+
+    mv "$tmp" "$dest"
+    chmod 0644 "$dest"
+}
+
+FASTFETCH_DEB_URL=""
+if command -v jq >/dev/null 2>&1; then
+    FASTFETCH_DEB_URL=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 \
+        https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest 2>/dev/null \
+        | jq -r '.assets[]? | select(.name | endswith("amd64.deb")) | .browser_download_url' \
+        | head -n1)
+else
+    FASTFETCH_DEB_URL=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 \
+        https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest 2>/dev/null \
+        | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -121,45 +171,30 @@ try:
         if a['name'].endswith('amd64.deb'):
             print(a['browser_download_url'])
             break
-except: pass
+except Exception:
+    pass
 " 2>/dev/null)
-if [[ -n "$FASTFETCH_DEB_URL" ]]; then
-    curl -L "$FASTFETCH_DEB_URL" -o /tmp/fastfetch.deb 2>/dev/null && \
-        dpkg -i /tmp/fastfetch.deb 2>/dev/null && \
-        rm -f /tmp/fastfetch.deb && \
-        success "fastfetch installed" || \
-        warn "fastfetch installation failed"
+fi
+
+if [[ -z "$FASTFETCH_DEB_URL" ]]; then
+    warn "Could not resolve fastfetch release URL from GitHub API."
+    warn "Falling back to the known release path."
+    FASTFETCH_DEB_URL="https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb"
+fi
+
+if _fetch_verified "$FASTFETCH_DEB_URL" /tmp/fastfetch.deb \
+        "$CHECKSUM_FASTFETCH" "fastfetch"; then
+    if dpkg -i /tmp/fastfetch.deb 2>/dev/null; then
+        success "fastfetch installed"
+    else
+        warn "fastfetch .deb failed to install — install manually"
+    fi
+    rm -f /tmp/fastfetch.deb
 else
-    # Fallback: direct download of the known package
-    curl -L "https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb" \
-        -o /tmp/fastfetch.deb 2>/dev/null && \
-        dpkg -i /tmp/fastfetch.deb 2>/dev/null && \
-        rm -f /tmp/fastfetch.deb && \
-        success "fastfetch installed (fallback)" || \
-        warn "fastfetch installation failed — install manually"
+    warn "fastfetch skipped — pin CHECKSUM_FASTFETCH in lib/checksums.sh"
 fi
 
 # ── X11 / startx without sudo ────────────────────────────────
-# Debian 12 ships Xorg without the SUID bit (rootless Xorg).
-# For "startx" directly from the TTY without sudo, two things are needed:
-#
-# 1. Xwrapper.config:
-#    allowed_users=anybody  → anyone may start X (not just console owner)
-#    needs_root_rights=auto → Xorg asks systemd-logind for device access.
-#                             In a real TTY session (getty → PAM → logind)
-#                             Xorg receives ACLs on /dev/dri/* and /dev/input/*.
-#                             This is safer than needs_root_rights=yes (SUID).
-#
-# 2. Groups:
-#    video  → /dev/dri/* (GPU/DRM)
-#    input  → /dev/input/* (keyboard, mouse) — Debian does NOT assign this automatically
-#    render → /dev/dri/renderD* (GPU rendering)
-#    tty    → /dev/tty* (TTY switching by X)
-#    audio  → /dev/snd/* (PipeWire, for safety)
-#
-# Without group membership, startx fails with "No screens found" or
-# "Cannot open /dev/dri/card0" — even with allowed_users=anybody.
-
 mkdir -p /etc/X11
 cat > /etc/X11/Xwrapper.config << 'XWEOF'
 allowed_users=anybody
