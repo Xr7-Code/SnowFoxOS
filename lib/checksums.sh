@@ -24,15 +24,15 @@
 
 # fastfetch — GitHub release (fastfetch-linux-amd64.deb)
 # Upstream: https://github.com/fastfetch-cli/fastfetch/releases
-CHECKSUM_FASTFETCH="UNPINNED"
+CHECKSUM_FASTFETCH="06e9a1be9a863dc815f8a31a6b1abec7b29967be30084ffcc29c1bca072d801b"
 
 # Bibata-Modern-Classic cursor theme — GitHub release (tar.xz)
 # Upstream: https://github.com/ful1e5/Bibata_Cursor/releases
-CHECKSUM_BIBATA="UNPINNED"
+CHECKSUM_BIBATA="7d3495864e5bbef02f5e77de760b2905903b63c71495a78ef6306d19a3b556d8"
 
 # JetBrainsMono Nerd Font — GitHub release (zip)
 # Upstream: https://github.com/ryanoasis/nerd-fonts/releases
-CHECKSUM_JETBRAINSMONO="UNPINNED"
+CHECKSUM_JETBRAINSMONO="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 # gum — Charm TUI toolkit (tar.gz, arch-aware)
 # Upstream: https://github.com/charmbracelet/gum/releases
