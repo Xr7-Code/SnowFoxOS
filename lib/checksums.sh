@@ -42,6 +42,26 @@ CHECKSUM_GUM="UNPINNED"
 # of tarball hash. The build script must check out this exact commit.
 CLIPNOTIFY_COMMIT="UNPINNED"
 
+# yt-dlp — GitHub release (standalone binary)
+# Upstream: https://github.com/yt-dlp/yt-dlp/releases
+# Releases frequently — update via "snowfox update-checksums".
+CHECKSUM_YTDLP="UNPINNED"
+
+# gum — GitHub release (arch-aware tar.gz)
+CHECKSUM_GUM="UNPINNED"   # already present in the previous version
+
+# VSCodium repository signing key (GPG fingerprint, 40 hex chars)
+# Get it once with:
+#   curl -fsSL https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg \
+#     | gpg --show-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}'
+VSCODIUM_GPG_FPR="UNPINNED"
+
+# OnlyOffice repository signing key (GPG fingerprint)
+# Get it once with:
+#   curl -fsSL https://download.onlyoffice.com/GPG-KEY-ONLYOFFICE \
+#     | gpg --show-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}'
+ONLYOFFICE_GPG_FPR="UNPINNED"
+
 # ── Helper: verify a file against a pinned checksum ─────────
 # Usage: _verify_checksum <file> <expected> <name>
 # Returns 0 on success, 1 on mismatch or unpinned.
