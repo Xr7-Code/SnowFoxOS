@@ -4,8 +4,8 @@
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
 #  CHANGED (security):
-#   - yt-dlp fetched via _fetch_verified (SHA256-pinned)
-#   - gum GitHub fallback via _fetch_verified (SHA256-pinned)
+#   - gum installed via apt (official Debian 12 repo), no hash needed
+#   - yt-dlp installed via bookworm-backports, no hash needed
 #   - VSCodium / OnlyOffice GPG keys verified against pinned
 #     fingerprints before being trusted
 #   - all curl calls constrained to HTTPS + TLS 1.2
@@ -17,6 +17,17 @@ source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/checksums.sh"
 
 step "5/10 — Terminal & Default Apps"
+
+# ── Ensure bookworm-backports is available for yt-dlp ────────
+# yt-dlp in bookworm is 2023.03.04 (too old for YouTube).
+# bookworm-backports has 2025.04.30 — still via apt, no hash pinning.
+if ! grep -q "bookworm-backports" /etc/apt/sources.list 2>/dev/null; then
+    info "Adding bookworm-backports for yt-dlp..."
+    echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware" \
+        >> /etc/apt/sources.list
+    wait_apt
+    apt-get update -qq
+fi
 
 wait_apt
 apt-get install -y \
@@ -73,13 +84,9 @@ if ask_install "GIMP (professional image editing, ~300 MB)"; then
 fi
 
 # ── VSCodium (third-party repo, pinned key) ──────────────────
-# CHANGED: the GPG key is now verified against a pinned
-# fingerprint before being installed. Without this check, a
-# compromised gitlab.com endpoint could serve a different key
-# on first import, and signed-by would then trust it forever.
 if ask_install "VSCodium"; then
     set -o pipefail
-    _VSCODIUM_KEY_FPR="${VSCODIUM_GPG_FPR:-}"   # pinned in checksums.sh
+    _VSCODIUM_KEY_FPR="${VSCODIUM_GPG_FPR:-}"
     if [[ -z "$_VSCODIUM_KEY_FPR" || "$_VSCODIUM_KEY_FPR" == "UNPINNED" ]]; then
         warn "VSCodium GPG fingerprint not pinned — skipping VSCodium."
         warn "Pin VSCODIUM_GPG_FPR in lib/checksums.sh to enable it."
@@ -150,77 +157,31 @@ if ask_install "OnlyOffice"; then
     set +o pipefail
 fi
 
-# ── yt-dlp (SHA256-pinned) ───────────────────────────────────
-# CHANGED: was a bare curl into /usr/local/bin. Now verified.
-# yt-dlp releases frequently — update CHECKSUM_YTDLP via
-# "snowfox update-checksums" or manually.
-info "Installing yt-dlp (verified)..."
-_fetch_verified \
-    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" \
-    /usr/local/bin/yt-dlp \
-    "${CHECKSUM_YTDLP}" \
-    "yt-dlp" \
-    && chmod 0755 /usr/local/bin/yt-dlp \
-    && success "yt-dlp installed" \
-    || warn "yt-dlp skipped — pin CHECKSUM_YTDLP in lib/checksums.sh"
+# ── yt-dlp (bookworm-backports, apt-verified) ────────────────
+# CHANGED: no more GitHub download + hash pinning.
+# bookworm-backports carries 2025.04.30 — recent enough for
+# YouTube, and verified by Debian's repository signatures.
+info "Installing yt-dlp from bookworm-backports..."
+if apt-get install -y -t bookworm-backports yt-dlp; then
+    success "yt-dlp installed (bookworm-backports)"
+else
+    warn "yt-dlp install from backports failed — trying bookworm version"
+    apt-get install -y yt-dlp && success "yt-dlp installed (bookworm, may be old)" \
+        || warn "yt-dlp could not be installed"
+fi
 
 # Node.js — JS runtime for yt-dlp
 apt-get install -y nodejs 2>/dev/null || true
 success "Node.js installed (JS runtime for yt-dlp)"
 
-# ── gum — Charm TUI toolkit for "snowfox music" ──────────────
-if command -v gum &>/dev/null; then
-    info "gum already installed"
+# ── gum (official Debian 12 repo, apt-verified) ──────────────
+# CHANGED: gum is in Debian 12 main (0.14.4). No GitHub fallback,
+# no hash pinning. apt handles integrity.
+info "Installing gum (TUI toolkit for snowfox music)..."
+if apt-get install -y gum; then
+    success "gum installed"
 else
-    info "Installing gum (TUI toolkit for snowfox music)..."
-    GUM_OK="false"
-
-    # Try Debian/backports first (no pinning needed — apt handles it)
-    if apt-get install -y gum 2>/dev/null; then
-        GUM_OK="true"
-    else
-        # GitHub fallback — SHA256-pinned
-        case "$(/usr/bin/uname -m)" in
-            x86_64|amd64)  GUM_ARCH="x86_64" ;;
-            aarch64|arm64) GUM_ARCH="arm64" ;;
-            armv7l)        GUM_ARCH="armv7" ;;
-            armv6l)        GUM_ARCH="armv6" ;;
-            i386|i686)     GUM_ARCH="i386" ;;
-            *)             GUM_ARCH="" ;;
-        esac
-
-        if [[ -n "$GUM_ARCH" ]]; then
-            # Resolve latest version via jq (fallback to python3)
-            if command -v jq >/dev/null 2>&1; then
-                GUM_VER=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 \
-                    "https://api.github.com/repos/charmbracelet/gum/releases/latest" 2>/dev/null \
-                    | jq -r '.tag_name // empty' | sed 's/^v//')
-            else
-                GUM_VER=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 \
-                    "https://api.github.com/repos/charmbracelet/gum/releases/latest" 2>/dev/null \
-                    | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null)
-            fi
-
-            if [[ -n "$GUM_VER" ]]; then
-                _tmp_gum=$(mktemp --suffix=.tar.gz)
-                if _fetch_verified \
-                     "https://github.com/charmbracelet/gum/releases/download/v${GUM_VER}/gum_${GUM_VER}_Linux_${GUM_ARCH}.tar.gz" \
-                     "$_tmp_gum" "${CHECKSUM_GUM}" "gum"; then
-                    if tar -xzf "$_tmp_gum" -C /usr/local/bin --strip-components=1 'gum_*/gum'; then
-                        chmod 0755 /usr/local/bin/gum
-                        GUM_OK="true"
-                    fi
-                fi
-                rm -f "$_tmp_gum"
-            fi
-        fi
-    fi
-
-    if [[ "$GUM_OK" == "true" ]]; then
-        success "gum installed"
-    else
-        warn "gum could not be installed — 'snowfox music' will show manual instructions"
-    fi
+    warn "gum could not be installed — 'snowfox music' will show manual instructions"
 fi
 
 # ── Clone SnowFox Console Launcher ───────────────────────────
