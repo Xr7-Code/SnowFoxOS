@@ -50,6 +50,10 @@ VSCODIUM_GPG_FPR="1302DE60231889FE1EBACADC54678CF75A278D9C"
 #     | gpg --show-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}'
 ONLYOFFICE_GPG_FPR="E09CA29F6E178040EF22B4098320CA65CB2DE8E5"
 
+# bluetui — prebuilt musl binary (x86_64)
+# Upstream: https://github.com/pythops/bluetui/releases
+CHECKSUM_BLUETUI="b476ee473cb4f7a48cd75d440e991bedc835ff5ac704aac1f1992f8e826222fd"
+
 # ── Helper: verify a file against a pinned checksum ─────────
 # Usage: _verify_checksum <file> <expected> <name>
 # Returns 0 on success, 1 on mismatch or unpinned.
