@@ -1,0 +1,280 @@
+; ============================================================
+;    SnowFoxOS v3.4 — Polybar Config
+;    Template: templates/polybar.ini.tmpl
+;    Rendered to: ~/.config/polybar/config.ini
+;    Theme: ${THEME_NAME}
+;    Tokens: BG=${BG}  ACCENT=${ACCENT}  FG=${FG}
+; ============================================================
+
+[colors]
+bg          = ${BG}
+accent      = ${ACCENT}
+fg          = ${FG}
+urgent      = #ff5555
+transparent = #00000000
+
+; ============================================================
+;    Base Bar (shared settings)
+; ============================================================
+[bar/base]
+width         = 100%
+offset-x      = 0
+offset-y      = 0
+height        = 36
+radius        = 0
+
+pseudo-transparency = true
+fixed-center        = true
+
+background = ${colors.bg}
+foreground = ${colors.accent}
+
+border-size   = 0
+line-size     = 0
+padding-left  = 1
+padding-right = 1
+
+module-margin-left  = 0
+module-margin-right = 2
+
+font-0 = "JetBrainsMono Nerd Font:style=Medium:size=9;2"
+font-1 = "JetBrainsMono Nerd Font:style=Bold:size=9;2"
+font-2 = "JetBrainsMono Nerd Font:size=12;3"
+font-3 = "JetBrainsMono Nerd Font:size=8;2"
+font-4 = "Noto Color Emoji:scale=10;3"
+
+wm-restack        = i3
+override-redirect = false
+
+tray-position   = right
+tray-maxsize    = 14
+tray-padding    = 5
+tray-background = ${colors.bg}
+tray-offset-y   = 0
+
+; Accent bottom line — the only decoration
+border-bottom-size  = 1
+border-bottom-color = ${colors.accent}
+
+; ============================================================
+;    Desktop Bar
+; ============================================================
+[bar/snowfox]
+inherit        = bar/base
+modules-left   = launcher workspaces
+modules-center = date
+modules-right  = memory network pulseaudio bluetooth tray-spacer
+
+; ============================================================
+;    Laptop Bar (adds backlight + battery)
+; ============================================================
+[bar/snowfox-laptop]
+inherit        = bar/base
+modules-left   = launcher workspaces
+modules-center = date
+modules-right  = backlight battery memory network pulseaudio bluetooth tray-spacer
+
+; ============================================================
+;    Helper
+; ============================================================
+[module/tray-spacer]
+type    = custom/text
+content = "  "
+content-foreground = ${colors.transparent}
+
+; ============================================================
+;    Launcher (fox icon → opens Rofi)
+; ============================================================
+[module/launcher]
+type = custom/text
+content = %{A1:rofi -show drun -theme ~/.config/rofi/config.rasi:}%{O2}🦊︎%{O-1}%{A}
+content-font       = 1
+content-foreground = ${colors.accent}
+content-background = ${colors.bg}
+content-padding    = 1
+
+; ============================================================
+;    Workspaces
+; ============================================================
+[module/workspaces]
+type         = internal/i3
+format       = <label-state> <label-mode>
+index-sort   = true
+wrapping-scroll = false
+
+label-mode         = %mode%
+label-mode-padding = 2
+label-mode-foreground = ${colors.urgent}
+label-mode-background = ${colors.bg}
+
+; Active: inverted — accent bg, bg text
+label-focused            = %name%
+label-focused-foreground = ${colors.bg}
+label-focused-background = ${colors.accent}
+label-focused-padding    = 2
+
+; Inactive: dim — accent text, low opacity handled by FG
+label-unfocused            = %name%
+label-unfocused-foreground = ${colors.fg}
+label-unfocused-background = ${colors.bg}
+label-unfocused-opacity    = 0.35
+label-unfocused-padding    = 2
+
+; Occupied (windows but not focused)
+label-visible            = %name%
+label-visible-foreground = ${colors.accent}
+label-visible-background = ${colors.bg}
+label-visible-padding    = 2
+
+; Urgent
+label-urgent            = %name%
+label-urgent-foreground = ${colors.urgent}
+label-urgent-background = ${colors.bg}
+label-urgent-padding    = 2
+
+; ============================================================
+;    Clock
+; ============================================================
+[module/date]
+type     = internal/date
+interval = 1
+
+date     = %H:%M
+date-alt = %H:%M   %a %d.%m.%Y
+
+format            = <label>
+format-background = ${colors.bg}
+format-padding    = 3
+label             = %date%
+label-font        = 2
+label-foreground  = ${colors.accent}
+
+; ============================================================
+;    RAM
+; ============================================================
+[module/memory]
+type     = internal/memory
+interval = 4
+
+format-prefix             = "󰍛 "
+format-prefix-font        = 3
+format-prefix-foreground  = ${colors.accent}
+format-background         = ${colors.bg}
+format-padding            = 2
+label                     = %percentage_used%%
+label-foreground          = ${colors.accent}
+
+; ============================================================
+;    Network
+; ============================================================
+[module/network]
+type     = custom/script
+interval = 5
+exec     = ~/.config/polybar/scripts/network-status.sh
+
+format-background = ${colors.bg}
+format-padding    = 2
+label             = %output%
+label-foreground  = ${colors.accent}
+
+; ============================================================
+;    Volume
+; ============================================================
+[module/pulseaudio]
+type        = internal/pulseaudio
+use-ui-max  = false
+
+format-volume-prefix           = "󰕾 "
+format-volume-prefix-font      = 3
+format-volume-prefix-foreground = ${colors.accent}
+format-volume-background       = ${colors.bg}
+format-volume-padding          = 2
+label-volume                   = %percentage%%
+label-volume-foreground        = ${colors.accent}
+
+format-muted-prefix            = "󰖁 "
+format-muted-prefix-font       = 3
+format-muted-prefix-foreground = ${colors.urgent}
+format-muted-background        = ${colors.bg}
+format-muted-padding           = 2
+label-muted                    = muted
+label-muted-foreground         = ${colors.urgent}
+
+click-right = pavucontrol &
+
+; ============================================================
+;    Battery (Laptop)
+; ============================================================
+[module/battery]
+type          = internal/battery
+poll-interval = 10
+full-at       = 99
+low-at        = 15
+
+format-charging-prefix           = "󰂄 "
+format-charging-prefix-font      = 3
+format-charging-prefix-foreground = ${colors.accent}
+format-charging-background       = ${colors.bg}
+format-charging-padding          = 2
+label-charging                   = %percentage%%
+label-charging-foreground        = ${colors.accent}
+
+format-discharging-prefix           = "󰁹 "
+format-discharging-prefix-font      = 3
+format-discharging-prefix-foreground = ${colors.accent}
+format-discharging-background       = ${colors.bg}
+format-discharging-padding          = 2
+label-discharging                   = %percentage%%
+label-discharging-foreground        = ${colors.accent}
+
+format-full-prefix           = "󰁹 "
+format-full-prefix-font      = 3
+format-full-prefix-foreground = ${colors.accent}
+format-full-background       = ${colors.bg}
+format-full-padding          = 2
+label-full                   = full
+label-full-foreground        = ${colors.accent}
+
+format-low-prefix           = "󰂃 "
+format-low-prefix-font      = 3
+format-low-prefix-foreground = ${colors.urgent}
+format-low-background       = ${colors.bg}
+format-low-padding          = 2
+label-low                   = %percentage%%!
+label-low-foreground        = ${colors.urgent}
+
+; ============================================================
+;    Brightness (Laptop)
+; ============================================================
+[module/backlight]
+type                  = internal/backlight
+use-actual-brightness = true
+enable-scroll         = true
+
+format-prefix           = "󰃠 "
+format-prefix-font      = 3
+format-prefix-foreground = ${colors.accent}
+format-background       = ${colors.bg}
+format-padding          = 2
+label                   = %percentage%%
+label-foreground        = ${colors.accent}
+
+; ============================================================
+;    Bluetooth
+; ============================================================
+[module/bluetooth]
+type     = custom/script
+interval = 3
+exec     = ~/.config/polybar/scripts/bluetooth.sh
+click-left = ~/.config/polybar/scripts/bluetooth.sh toggle
+
+format-background = ${colors.bg}
+format-padding    = 2
+label             = %output%
+label-foreground  = ${colors.accent}
+
+; --- hardware overrides (generated by launch.sh) ---
+include-file = ~/.config/polybar/hardware.conf
+
+; --- user overrides (never touched by renderer) ---
+include-file = ~/.config/polybar/config.local.ini

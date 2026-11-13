@@ -1,0 +1,16 @@
+# themes/snowfox-dark.theme
+# SnowFoxOS v3.4 — Dark (default)
+
+THEME_NAME="snowfox-dark"
+THEME_LABEL="SnowFox Dark"
+THEME_TYPE="dark"
+
+# Core tokens — 3 colors only
+BG="#111111"        # Background (bar, windows, terminals)
+ACCENT="#9966cc"    # Purple accent (active, focused, icons, cursor)
+FG="#e8e8e8"        # Text / inactive elements
+
+# UI metadata
+GTK_THEME="Arc-Dark"
+ICON_THEME="Papirus-Dark"
+FOLDER_COLOR="#9966cc"

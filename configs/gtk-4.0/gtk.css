@@ -1,0 +1,59 @@
+/* ============================================================
+   SnowFox — GTK4 / Libadwaita Color Override
+   Place at: ~/.config/gtk-4.0/gtk.css
+   Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+   ============================================================ */
+
+/* ── Libadwaita color tokens ───────────────────────────────── */
+:root {
+    --accent-bg-color:       #9966cc;
+    --accent-fg-color:       #ffffff;
+    --accent-color:          #b399e0;
+
+    --destructive-bg-color:  #e87a7a;
+    --destructive-fg-color:  #ffffff;
+    --destructive-color:     #e87a7a;
+
+    --success-bg-color:      #89c98a;
+    --success-fg-color:      #ffffff;
+    --success-color:         #89c98a;
+
+    --warning-bg-color:      #e8c97a;
+    --warning-fg-color:      #111111;
+    --warning-color:         #e8c97a;
+
+    --error-bg-color:        #e87a7a;
+    --error-fg-color:        #ffffff;
+    --error-color:           #e87a7a;
+
+    --window-bg-color:       #111111;
+    --window-fg-color:       #e8e8e8;
+
+    --view-bg-color:         #1a1a1a;
+    --view-fg-color:         #e8e8e8;
+
+    --headerbar-bg-color:    #1a1a1a;
+    --headerbar-fg-color:    #e8e8e8;
+    --headerbar-border-color:#252525;
+    --headerbar-shade-color: rgba(0,0,0,0.2);
+
+    --sidebar-bg-color:      #1a1a1a;
+    --sidebar-fg-color:      #e8e8e8;
+    --sidebar-border-color:  #252525;
+
+    --card-bg-color:         #1a1a1a;
+    --card-fg-color:         #e8e8e8;
+    --card-shade-color:      rgba(0,0,0,0.15);
+
+    --dialog-bg-color:       #111111;
+    --dialog-fg-color:       #e8e8e8;
+
+    --popover-bg-color:      #252525;
+    --popover-fg-color:      #e8e8e8;
+
+    --shade-color:           rgba(0,0,0,0.25);
+    --scrollbar-outline-color: rgba(0,0,0,0.3);
+
+    --thumbnail-bg-color:    #252525;
+    --thumbnail-fg-color:    #e8e8e8;
+}

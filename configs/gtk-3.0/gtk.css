@@ -1,0 +1,612 @@
+/* ============================================================
+   SnowFox — GTK3 Color Override v2 (minimalist polish)
+   Place at: ~/.config/gtk-3.0/gtk.css
+   Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+   ============================================================ */
+
+/* ── Palette ───────────────────────────────────────────────── */
+@define-color bg_color         #111111;
+@define-color bg_alt_color     #1a1a1a;
+@define-color bg_hover_color   #252525;
+@define-color fg_color         #e8e8e8;
+@define-color fg_dim_color     #888888;
+@define-color selected_bg_color #9966cc;
+@define-color selected_fg_color #ffffff;
+@define-color purple_hover     #b399e0;
+@define-color purple_active    #5c3d80;
+@define-color error_color      #e87a7a;
+@define-color success_color    #89c98a;
+@define-color warning_color    #e8c97a;
+@define-color border_color     #252335;
+
+/* Override Arc-Dark internal tokens */
+@define-color theme_bg_color             #111111;
+@define-color theme_fg_color             #e8e8e8;
+@define-color theme_base_color           #1a1a1a;
+@define-color theme_text_color           #e8e8e8;
+@define-color theme_selected_bg_color    #9966cc;
+@define-color theme_selected_fg_color    #ffffff;
+@define-color theme_unfocused_bg_color             #111111;
+@define-color theme_unfocused_fg_color             #888888;
+@define-color theme_unfocused_base_color           #1a1a1a;
+@define-color theme_unfocused_text_color           #e8e8e8;
+@define-color theme_unfocused_selected_bg_color    #5c3d80;
+@define-color theme_unfocused_selected_fg_color    #ffffff;
+@define-color theme_tooltip_bg_color     #252525;
+@define-color theme_tooltip_fg_color     #e8e8e8;
+@define-color insensitive_bg_color       #111111;
+@define-color insensitive_fg_color       #888888;
+@define-color insensitive_base_color     #1a1a1a;
+@define-color borders                    #252335;
+@define-color alt_borders                #252335;
+@define-color borders_edge               #252335;
+@define-color link_color                 #b399e0;
+@define-color link_visited_color         #5c3d80;
+@define-color sidebar_bg_color           #1a1a1a;
+@define-color sidebar_fg_color           #e8e8e8;
+@define-color sidebar_border_color       #252335;
+@define-color wm_title_focused_bg        #1a1a1a;
+@define-color wm_title_unfocused_bg      #111111;
+@define-color wm_title_focused_fg        #e8e8e8;
+@define-color wm_title_unfocused_fg      #888888;
+@define-color wm_button_hover_bg         #9966cc;
+@define-color wm_button_close_bg         #e87a7a;
+
+/* ── Base surfaces ─────────────────────────────────────────── */
+* {
+    color:            @fg_color;
+    background-color: transparent;
+    border-color:     @border_color;
+    outline-color:    @selected_bg_color;
+    outline-width:    0;
+    outline-offset:   0;
+}
+
+window, .background, .app-background {
+    background-color: @bg_color;
+    color:            @fg_color;
+}
+
+/* ── Headerbar ─────────────────────────────────────────────── */
+headerbar, .titlebar {
+    background-color: @bg_alt_color;
+    color:            @fg_color;
+    border-bottom:    1px solid @border_color;
+    box-shadow:       none;
+}
+
+headerbar:backdrop, .titlebar:backdrop {
+    background-color: @bg_color;
+    color:            @fg_dim_color;
+    box-shadow:       none;
+}
+
+/* ── Buttons ───────────────────────────────────────────────── */
+button {
+    background-color: @bg_alt_color;
+    background-image: none;
+    box-shadow:       none;
+    text-shadow:      none;
+    color:            @fg_color;
+    border-color:     @border_color;
+    border-width:     1px;
+    border-style:     solid;
+    border-radius:    5px;
+    padding:          3px 10px;
+    min-height:       20px;
+    transition:       background-color 80ms, border-color 80ms;
+}
+
+button:hover {
+    background-color: @bg_hover_color;
+    color:            @fg_color;
+    border-color:     alpha(@selected_bg_color, 0.5);
+}
+
+button:active, button:checked {
+    background-color: @purple_active;
+    color:            @selected_fg_color;
+    border-color:     @selected_bg_color;
+}
+
+button:disabled {
+    background-color: transparent;
+    color:            @fg_dim_color;
+    border-color:     @border_color;
+}
+
+button.suggested-action {
+    background-color: @selected_bg_color;
+    color:            @selected_fg_color;
+    border-color:     @selected_bg_color;
+}
+
+button.suggested-action:hover {
+    background-color: @purple_hover;
+    border-color:     @purple_hover;
+}
+
+button.destructive-action {
+    background-color: @error_color;
+    color:            @selected_fg_color;
+    border-color:     @error_color;
+}
+
+/* ── Toolbar ── KEY CHANGE: nearly invisible, flat ─────────── */
+toolbar, .toolbar {
+    background-color: @bg_color;
+    border-bottom:    1px solid @border_color;
+    padding:          2px 2px;
+}
+
+toolbar button,
+.toolbar button {
+    background-color: transparent;
+    background-image: none;
+    border-color:     transparent;
+    border-radius:    4px;
+    border-width:     1px;
+    border-style:     solid;
+    box-shadow:       none;
+    padding:          3px 5px;
+    min-height:       0;
+    color:            @fg_dim_color;
+    transition:       background-color 80ms;
+}
+
+toolbar button:hover,
+.toolbar button:hover {
+    background-color: @bg_hover_color;
+    border-color:     transparent;
+    color:            @fg_color;
+}
+
+toolbar button:checked,
+toolbar button:active,
+.toolbar button:checked,
+.toolbar button:active {
+    background-color: alpha(@selected_bg_color, 0.2);
+    border-color:     alpha(@selected_bg_color, 0.35);
+    color:            @purple_hover;
+}
+
+toolbar button:disabled,
+.toolbar button:disabled {
+    color:            alpha(@fg_dim_color, 0.4);
+}
+
+toolbar separator,
+.toolbar separator {
+    background-color: @border_color;
+    min-width:        1px;
+    margin:           6px 3px;
+}
+
+/* ── Entry fields & text views ─────────────────────────────── */
+entry, spinbutton {
+    background-color: @bg_alt_color;
+    background-image: none;
+    box-shadow:       none;
+    color:            @fg_color;
+    caret-color:      @selected_bg_color;
+    border-width:     1px;
+    border-style:     solid;
+    border-color:     @border_color;
+    border-radius:    4px;
+    padding:          3px 8px;
+    min-height:       20px;
+    transition:       border-color 100ms;
+}
+
+entry:hover, spinbutton:hover {
+    border-color: alpha(@purple_hover, 0.4);
+}
+
+entry:focus, spinbutton:focus {
+    border-color: @selected_bg_color;
+    box-shadow:   0 0 0 1px alpha(@selected_bg_color, 0.25);
+}
+
+textview, textview text {
+    background-color: @bg_alt_color;
+    color:            @fg_color;
+    caret-color:      @selected_bg_color;
+}
+
+textview border {
+    background-color: transparent;
+}
+
+/* ── Text selection ─────────────────────────────────────────── */
+selection,
+entry selection,
+spinbutton selection,
+textview text selection,
+label selection,
+.view selection,
+*:selected {
+    background-color: @selected_bg_color;
+    color:            @selected_fg_color;
+}
+
+selection:backdrop,
+entry selection:backdrop,
+textview text selection:backdrop,
+label selection:backdrop,
+.view selection:backdrop,
+*:selected:backdrop {
+    background-color: @purple_active;
+    color:            @selected_fg_color;
+}
+
+/* ── Menubar ── KEY CHANGE: thinner, flatter ───────────────── */
+menubar {
+    background-color: @bg_color;
+    color:            @fg_dim_color;
+    border-bottom:    1px solid @border_color;
+    padding:          0;
+}
+
+menubar > menuitem {
+    padding:       3px 8px;
+    border-radius: 0;
+    color:         @fg_dim_color;
+}
+
+menubar > menuitem:hover {
+    background-color: @bg_hover_color;
+    color:            @fg_color;
+}
+
+/* ── Menus ─────────────────────────────────────────────────── */
+menu, .menu {
+    background-color: @bg_alt_color;
+    color:            @fg_color;
+    border:           1px solid @border_color;
+    border-radius:    6px;
+    padding:          3px;
+    box-shadow:       0 4px 16px alpha(#000000, 0.4);
+}
+
+menuitem {
+    color:            @fg_color;
+    background-color: transparent;
+    border-radius:    4px;
+}
+
+menu menuitem {
+    padding:       4px 10px;
+    border-radius: 4px;
+}
+
+menuitem:hover {
+    background-color: alpha(@selected_bg_color, 0.25);
+    color:            @purple_hover;
+}
+
+menuitem:disabled {
+    color: alpha(@fg_dim_color, 0.5);
+}
+
+menu separator {
+    background-color: @border_color;
+    min-height:       1px;
+    margin:           3px 6px;
+}
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+.sidebar, placessidebar, .placessidebar {
+    background-color: @bg_alt_color;
+    color:            @fg_color;
+    border-color:     @border_color;
+}
+
+.sidebar row:hover, placessidebar row:hover {
+    background-color: @bg_hover_color;
+}
+
+.sidebar row:selected, placessidebar row:selected {
+    background-color: alpha(@selected_bg_color, 0.3);
+    color:            @purple_hover;
+}
+
+/* ── TreeView ── KEY CHANGE: subtle headers, tighter rows ───── */
+treeview, treeview.view, .view {
+    background-color: @bg_color;
+    color:            @fg_color;
+}
+
+treeview row {
+    background-color: transparent;
+    color:            @fg_color;
+    min-height:       20px;
+}
+
+treeview.view cell {
+    padding: 1px 4px;
+}
+
+treeview.view:hover,
+treeview row:hover {
+    background-color: alpha(@bg_hover_color, 0.7);
+}
+
+/* Selected rows */
+treeview.view:selected,
+treeview.view:selected:focus,
+treeview.view:selected:hover,
+treeview.view row:selected,
+treeview.view row:selected:focus,
+treeview.view row:selected:hover,
+treeview row:selected,
+treeview row:selected:focus,
+treeview row:selected:hover,
+iconview:selected,
+iconview:selected:focus,
+.view:selected,
+.view:selected:focus,
+.view:selected:hover,
+list row:selected,
+list row:selected:focus,
+list row:selected:hover,
+listbox row:selected,
+listbox row:selected:focus,
+listbox row:selected:hover,
+row:selected,
+row:selected:focus,
+row:selected:hover,
+cell:selected,
+cell:selected:focus {
+    background-color: alpha(@selected_bg_color, 0.28);
+    color:            @purple_hover;
+}
+
+treeview row:selected label,
+list row:selected label,
+listbox row:selected label,
+row:selected label,
+row:selected image {
+    color: @purple_hover;
+}
+
+treeview.view:selected:backdrop,
+treeview.view row:selected:backdrop,
+treeview row:selected:backdrop,
+iconview:selected:backdrop,
+.view:selected:backdrop,
+list row:selected:backdrop,
+listbox row:selected:backdrop,
+row:selected:backdrop,
+cell:selected:backdrop {
+    background-color: alpha(@purple_active, 0.35);
+    color:            @fg_dim_color;
+}
+
+/* Tree expander arrows */
+treeview.view.expander {
+    -gtk-icon-source: -gtk-icontheme("pan-end-symbolic");
+    color:            @fg_dim_color;
+}
+
+treeview.view.expander:hover {
+    color: @purple_hover;
+}
+
+treeview.view.expander:checked {
+    -gtk-icon-source: -gtk-icontheme("pan-down-symbolic");
+    color:            @selected_bg_color;
+}
+
+/* Table column headers ── KEY CHANGE: very subtle, no border noise */
+treeview header button {
+    background-color: @bg_color;
+    background-image: none;
+    box-shadow:       none;
+    color:            @fg_dim_color;
+    font-size:        0.85em;
+    padding:          2px 6px;
+    min-height:       0;
+    border-radius:    0;
+    border-style:     solid;
+    border-width:     0 0 1px 0;
+    border-color:     @border_color;
+    text-shadow:      none;
+}
+
+treeview header button:hover {
+    background-color: @bg_alt_color;
+    color:            @fg_color;
+}
+
+treeview header button:active,
+treeview header button:checked {
+    color:            @purple_hover;
+}
+
+/* ── Notebook (tabs) ───────────────────────────────────────── */
+notebook > header {
+    background-color: @bg_alt_color;
+    border-color:     @border_color;
+}
+
+notebook > header > tabs > tab {
+    background-color: transparent;
+    color:            @fg_dim_color;
+    padding:          4px 14px;
+    border:           0 solid transparent;
+    border-radius:    0;
+    transition:       color 80ms;
+}
+
+notebook > header > tabs > tab:checked {
+    background-color: @bg_color;
+    color:            @fg_color;
+}
+
+notebook > header > tabs > tab:hover {
+    color:            @fg_color;
+}
+
+notebook > header.top > tabs > tab:checked {
+    border-bottom: 2px solid @selected_bg_color;
+}
+
+notebook > header.bottom > tabs > tab:checked {
+    border-top: 2px solid @selected_bg_color;
+}
+
+notebook > header.left > tabs > tab:checked {
+    border-right: 2px solid @selected_bg_color;
+}
+
+notebook > header.right > tabs > tab:checked {
+    border-left: 2px solid @selected_bg_color;
+}
+
+/* ── Scrollbar ── KEY CHANGE: thinner, overlay style ────────── */
+scrolledwindow.frame,
+scrolledwindow {
+    border-color: @border_color;
+}
+
+scrolledwindow undershoot.top,
+scrolledwindow undershoot.bottom,
+scrolledwindow undershoot.left,
+scrolledwindow undershoot.right,
+scrolledwindow overshoot.top,
+scrolledwindow overshoot.bottom,
+scrolledwindow overshoot.left,
+scrolledwindow overshoot.right {
+    background-image: none;
+}
+
+scrollbar {
+    background-color: transparent;
+    border:           none;
+}
+
+scrollbar trough {
+    background-color: transparent;
+    border-radius:    6px;
+    margin:           2px;
+}
+
+scrollbar slider {
+    background-color: alpha(@fg_dim_color, 0.35);
+    background-clip:  padding-box;
+    min-width:        5px;
+    min-height:       5px;
+    border:           2px solid transparent;
+    border-radius:    6px;
+    transition:       background-color 100ms;
+}
+
+scrollbar:hover slider,
+scrollbar slider:hover {
+    background-color: alpha(@purple_hover, 0.6);
+}
+
+scrollbar slider:active {
+    background-color: @selected_bg_color;
+}
+
+/* ── Tooltip ───────────────────────────────────────────────── */
+tooltip {
+    background-color: @bg_alt_color;
+    color:            @fg_color;
+    border:           1px solid @border_color;
+    border-radius:    5px;
+    padding:          4px 8px;
+}
+
+tooltip label {
+    color:            @fg_color;
+    background-color: transparent;
+}
+
+/* ── Popover ───────────────────────────────────────────────── */
+popover {
+    background-color: @bg_alt_color;
+    border:           1px solid @border_color;
+    border-radius:    8px;
+    box-shadow:       0 4px 16px alpha(#000000, 0.4);
+}
+
+/* ── Listbox ───────────────────────────────────────────────── */
+list, listbox {
+    background-color: @bg_color;
+    color:            @fg_color;
+}
+
+list row:hover, listbox row:hover {
+    background-color: @bg_hover_color;
+}
+
+/* ── Check & Radio ─────────────────────────────────────────── */
+check:checked, radio:checked {
+    background-color: @selected_bg_color;
+    border-color:     @selected_bg_color;
+    color:            @selected_fg_color;
+}
+
+/* ── Switch ────────────────────────────────────────────────── */
+switch:checked {
+    background-color: @selected_bg_color;
+    border-color:     @selected_bg_color;
+}
+
+/* ── Progressbar ───────────────────────────────────────────── */
+progressbar progress {
+    background-color: @selected_bg_color;
+    border-radius:    3px;
+}
+
+progressbar trough {
+    background-color: @bg_alt_color;
+    border-radius:    3px;
+}
+
+/* ── Scale ─────────────────────────────────────────────────── */
+scale trough highlight {
+    background-color: @selected_bg_color;
+}
+
+scale slider {
+    background-color: @selected_bg_color;
+    border-color:     @selected_bg_color;
+}
+
+/* ── Paned ─────────────────────────────────────────────────── */
+paned > separator {
+    background-color: @border_color;
+    background-image: none;
+    min-width:        1px;
+    min-height:       1px;
+}
+
+paned > separator:hover {
+    background-color: @selected_bg_color;
+}
+
+/* ── Statusbar ── KEY CHANGE: very quiet ────────────────────── */
+statusbar {
+    background-color: @bg_color;
+    color:            @fg_dim_color;
+    font-size:        0.85em;
+    padding:          1px 8px;
+    border-top:       1px solid @border_color;
+}
+
+/* ── Labels ────────────────────────────────────────────────── */
+label           { color: @fg_color; background-color: transparent; }
+label.dim-label { color: @fg_dim_color; }
+label:disabled  { color: alpha(@fg_dim_color, 0.5); }
+
+/* ── Links ─────────────────────────────────────────────────── */
+*:link    { color: @purple_hover; }
+*:visited { color: @purple_active; }
+
+/* ── Rounded corners ───────────────────────────────────────── */
+button, entry, menu, popover {
+    border-radius: 5px;
+}

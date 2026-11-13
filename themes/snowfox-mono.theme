@@ -1,0 +1,16 @@
+# themes/snowfox-mono.theme
+# SnowFoxOS v3.4 — Monochrome
+
+THEME_NAME="snowfox-mono"
+THEME_LABEL="SnowFox Mono"
+THEME_TYPE="dark"
+
+# Core tokens — 3 colors only
+BG="#000000"        # Pure black
+ACCENT="#ffffff"    # Pure white (accent = foreground in mono mode)
+FG="#ffffff"        # Text
+
+# UI metadata
+GTK_THEME="Arc-Dark"
+ICON_THEME="Papirus-Dark"
+FOLDER_COLOR="#ffffff"

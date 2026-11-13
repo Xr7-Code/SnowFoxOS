@@ -1,0 +1,54 @@
+/* ============================================================
+   SnowFoxOS v3.4 — GTK 3 Theme Overrides
+   Template: templates/gtk-3.0.css.tmpl
+   Rendered to: ~/.config/gtk-3.0/gtk.css
+   Theme: ${THEME_NAME}
+   Tokens: BG  ACCENT  FG  (3 only)
+   Base: Arc-Dark (dark) / Arc (light)
+   ============================================================ */
+
+@define-color theme_bg_color          ${BG};
+@define-color theme_fg_color          ${FG};
+@define-color theme_selected_bg_color ${ACCENT};
+@define-color theme_selected_fg_color ${BG};
+@define-color accent_color            ${ACCENT};
+@define-color accent_bg_color         ${ACCENT};
+@define-color accent_fg_color         ${BG};
+
+/* Selection */
+selection, *:selected {
+    background-color: ${ACCENT};
+    color:            ${BG};
+}
+
+/* Scrollbar */
+scrollbar slider {
+    background-color: ${ACCENT};
+    opacity: 0.4;
+    min-width: 4px;
+    min-height: 4px;
+    border-radius: 2px;
+}
+scrollbar slider:hover { opacity: 0.7; }
+
+/* Focus ring */
+*:focus {
+    outline-color: ${ACCENT};
+    outline-width: 1px;
+    outline-style: solid;
+}
+
+/* Headerbar active */
+headerbar {
+    background-color: ${BG};
+    color:            ${FG};
+    border-bottom: 1px solid ${ACCENT};
+}
+
+/* Entry fields */
+entry {
+    border-color: transparent;
+}
+entry:focus {
+    border-color: ${ACCENT};
+}

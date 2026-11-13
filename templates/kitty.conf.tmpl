@@ -1,0 +1,56 @@
+# ============================================================
+#    SnowFoxOS v3.4 — Kitty Terminal
+#    Template: templates/kitty.conf.tmpl
+#    Rendered to: ~/.config/kitty/kitty.conf
+#    Theme: ${THEME_NAME}
+#    Tokens: BG  ACCENT  FG  (3 only)
+# ============================================================
+
+# ── Colors ──────────────────────────────────────────────────
+background  ${BG}
+foreground  ${FG}
+cursor      ${ACCENT}
+cursor_text_color ${BG}
+selection_background ${ACCENT}
+selection_foreground ${BG}
+
+# ── Font ────────────────────────────────────────────────────
+font_family      JetBrainsMono Nerd Font
+bold_font        JetBrainsMono Nerd Font Bold
+italic_font      JetBrainsMono Nerd Font Italic
+font_size        11.0
+
+# ── Cursor ──────────────────────────────────────────────────
+cursor_shape          block
+cursor_blink_interval 0.5
+cursor_stop_blinking_after 15.0
+
+# ── Window ──────────────────────────────────────────────────
+window_padding_width   12
+hide_window_decorations yes
+background_opacity     0.95
+
+# ── Misc ────────────────────────────────────────────────────
+enable_audio_bell no
+confirm_os_window_close 0
+copy_on_select   yes
+strip_trailing_spaces smart
+
+# ── Color table (terminal 0-15) ──────────────────────────────
+# Dark theme: 16-color palette using BG/FG/ACCENT
+color0  ${BG}
+color1  #cc6666
+color2  #88aa77
+color3  #ddbb66
+color4  #77aacc
+color5  ${ACCENT}
+color6  #77aacc
+color7  ${FG}
+color8  #444444
+color9  #cc6666
+color10 #88aa77
+color11 #ddbb66
+color12 #77aacc
+color13 ${ACCENT}
+color14 #77aacc
+color15 ${FG}

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Musik
+Comment=SnowFox Stream & Music Player (TUI)
+Exec=kitty -e snowfox music
+Icon=applications-multimedia
+Type=Application
+Categories=AudioVideo;Audio;Player;

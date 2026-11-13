@@ -1,0 +1,16 @@
+# themes/snowfox-light.theme
+# SnowFoxOS v3.4 — Light
+
+THEME_NAME="snowfox-light"
+THEME_LABEL="SnowFox Light"
+THEME_TYPE="light"
+
+# Core tokens — 3 colors only
+BG="#f5f5f5"        # Background
+ACCENT="#9966cc"    # Purple accent (same, works on light too)
+FG="#111111"        # Text
+
+# UI metadata
+GTK_THEME="Arc"
+ICON_THEME="Papirus"
+FOLDER_COLOR="#9966cc"

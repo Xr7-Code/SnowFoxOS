@@ -1,0 +1,259 @@
+# ============================================================
+#    SnowFoxOS v3 — GTK2 Override Config
+#    Place at: ~/.gtkrc-2.0
+#    Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+# ============================================================
+# Order rule: With equal priority, the LATER definition wins.
+# Therefore: general first, specific last.
+
+# ── Color Scheme Globals ───────────────────────────────────
+gtk-color-scheme = "bg_color:#111111\nbg_alt_color:#1a1a1a\nbg_surface:#252525\nbg_hover:#332f50\nfg_color:#e8e8e8\nfg_dim_color:#888888\nbase_color:#111111\ntext_color:#e8e8e8\nselected_bg_color:#9966cc\nselected_fg_color:#ffffff\npurple_hover:#b399e0\npurple_active:#5c3d80\nborder_color:#252525\ntooltip_bg_color:#252525\ntooltip_fg_color:#e8e8e8\nlink_color:#b399e0"
+
+# ── Global Base Style ──────────────────────────────────────
+# ACTIVE = selection in a widget WITHOUT focus (e.g. window in
+# background). Previously #332f50 -> barely visible. Now purple_active.
+style "snowfox-colors" {
+    base[NORMAL]      = "#111111"
+    base[ACTIVE]      = "#5c3d80"
+    base[PRELIGHT]    = "#111111"
+    base[INSENSITIVE] = "#111111"
+    base[SELECTED]    = "#9966cc"
+
+    bg[NORMAL]        = "#252525"
+    bg[ACTIVE]        = "#1a1a1a"
+    bg[INSENSITIVE]   = "#111111"
+    bg[SELECTED]      = "#9966cc"
+    bg[PRELIGHT]      = "#332f50"
+
+    text[NORMAL]      = "#e8e8e8"
+    text[ACTIVE]      = "#ffffff"
+    text[PRELIGHT]    = "#e8e8e8"
+    text[SELECTED]    = "#ffffff"
+    text[INSENSITIVE] = "#888888"
+
+    fg[NORMAL]        = "#e8e8e8"
+    fg[ACTIVE]        = "#ffffff"
+    fg[SELECTED]      = "#ffffff"
+    fg[PRELIGHT]      = "#ffffff"
+    fg[INSENSITIVE]   = "#888888"
+
+    engine "murrine" {
+        contrast            = 0.0
+        gradient_shades     = { 1.0, 1.0, 1.0, 1.0 }
+        lightborder_shade   = 1.0
+        border_shades       = { 1.0, 1.0 }
+        focus_color         = "#b399e0"
+    }
+}
+
+# ── Lists / File views (PCManFM main area) ────────────────
+style "snowfox-view" {
+    base[NORMAL]      = "#111111"
+    base[ACTIVE]      = "#5c3d80"
+    base[SELECTED]    = "#9966cc"
+    bg[NORMAL]        = "#111111"
+    text[NORMAL]      = "#e8e8e8"
+    text[ACTIVE]      = "#ffffff"
+    text[SELECTED]    = "#ffffff"
+
+    GtkTreeView::even-row-color       = "#111111"
+    GtkTreeView::odd-row-color        = "#111111"
+    GtkTreeView::vertical-separator   = 4
+    GtkTreeView::horizontal-separator = 4
+}
+
+# ── Multi-line text fields ─────────────────────────────────
+style "snowfox-textview" {
+    base[NORMAL]      = "#111111"
+    base[ACTIVE]      = "#5c3d80"
+    base[SELECTED]    = "#9966cc"
+    text[NORMAL]      = "#e8e8e8"
+    text[ACTIVE]      = "#ffffff"
+    text[SELECTED]    = "#ffffff"
+}
+
+# ── Sidebar (PCManFM) ──────────────────────────────────────
+style "snowfox-sidebar" {
+    base[NORMAL]      = "#1a1a1a"
+    base[ACTIVE]      = "#5c3d80"
+    base[SELECTED]    = "#9966cc"
+    bg[NORMAL]        = "#1a1a1a"
+    bg[ACTIVE]        = "#332f50"
+    bg[PRELIGHT]      = "#332f50"
+    bg[SELECTED]      = "#9966cc"
+
+    text[NORMAL]      = "#e8e8e8"
+    text[ACTIVE]      = "#ffffff"
+    text[SELECTED]    = "#ffffff"
+    fg[NORMAL]        = "#e8e8e8"
+    fg[PRELIGHT]      = "#ffffff"
+    fg[SELECTED]      = "#ffffff"
+
+    GtkScrolledWindow::shadow-type       = GTK_SHADOW_NONE
+    GtkScrolledWindow::scrollbar-spacing = 0
+    GtkTreeView::shadow-type             = GTK_SHADOW_NONE
+    GtkTreeView::vertical-separator      = 5
+    GtkTreeView::horizontal-separator    = 6
+
+    engine "murrine" {
+        contrast          = 0.0
+        gradient_shades   = { 1.0, 1.0, 1.0, 1.0 }
+        lightborder_shade = 1.0
+        roundness         = 6
+        focus_color       = "#1a1a1a"
+    }
+}
+
+# ── Menu / toolbar bars ────────────────────────────────────
+style "snowfox-bars" {
+    bg[NORMAL]        = "#111111"
+    bg[ACTIVE]        = "#1a1a1a"
+    bg[PRELIGHT]      = "#252525"
+    fg[NORMAL]        = "#e8e8e8"
+
+    engine "murrine" {
+        gradient_shades   = { 1.0, 1.0, 1.0, 1.0 }
+        contrast          = 0.0
+        lightborder_shade = 1.0
+    }
+}
+
+# ── Tabs ───────────────────────────────────────────────────
+style "snowfox-tabs" {
+    bg[NORMAL]        = "#111111"
+    bg[ACTIVE]        = "#252525"
+    bg[PRELIGHT]      = "#332f50"
+}
+
+# ── Entry fields ───────────────────────────────────────────
+style "snowfox-entry" {
+    base[NORMAL]      = "#1a1a1a"
+    base[ACTIVE]      = "#5c3d80"
+    base[SELECTED]    = "#9966cc"
+    text[NORMAL]      = "#e8e8e8"
+    text[ACTIVE]      = "#ffffff"
+    text[SELECTED]    = "#ffffff"
+
+    engine "murrine" {
+        contrast          = 0.0
+        gradient_shades   = { 1.0, 1.0, 1.0, 1.0 }
+        lightborder_shade = 1.0
+        border_shades     = { 1.0, 1.0 }
+        roundness         = 8
+        focus_color       = "#b399e0"
+    }
+}
+
+# ── Buttons ────────────────────────────────────────────────
+style "snowfox-widgets" {
+    bg[NORMAL]        = "#252525"
+    bg[PRELIGHT]      = "#332f50"
+    bg[ACTIVE]        = "#9966cc"
+    fg[NORMAL]        = "#e8e8e8"
+    fg[PRELIGHT]      = "#ffffff"
+    fg[ACTIVE]        = "#ffffff"
+
+    engine "murrine" {
+        contrast          = 0.0
+        gradient_shades   = { 1.0, 1.0, 1.0, 1.0 }
+        lightborder_shade = 1.0
+        glow_shade        = 1.0
+        roundness         = 8
+        focus_color       = "#b399e0"
+    }
+}
+
+# ── Scrollbars ─────────────────────────────────────────────
+style "snowfox-scrollbar" {
+    bg[NORMAL]        = "#888888"
+    bg[PRELIGHT]      = "#b399e0"
+    bg[ACTIVE]        = "#9966cc"
+
+    engine "murrine" {
+        contrast          = 0.0
+        gradient_shades   = { 1.0, 1.0, 1.0, 1.0 }
+        roundness         = 10
+        trough_shades     = { 1.0, 1.0 }
+    }
+}
+
+# ── Separator (Paned) ──────────────────────────────────────
+style "snowfox-separator" {
+    bg[NORMAL]        = "#252525"
+    bg[PRELIGHT]      = "#b399e0"
+    bg[ACTIVE]        = "#9966cc"
+
+    GtkPaned::handle-size = 2
+
+    engine "murrine" {
+        contrast          = 0.0
+        gradient_shades   = { 1.0, 1.0, 1.0, 1.0 }
+    }
+}
+
+# ── Menus ──────────────────────────────────────────────────
+style "snowfox-menus" {
+    base[NORMAL]      = "#252525"
+    bg[NORMAL]        = "#252525"
+    bg[PRELIGHT]      = "#9966cc"
+    bg[SELECTED]      = "#9966cc"
+    fg[NORMAL]        = "#e8e8e8"
+    fg[PRELIGHT]      = "#ffffff"
+    fg[SELECTED]      = "#ffffff"
+    text[NORMAL]      = "#e8e8e8"
+    text[PRELIGHT]    = "#ffffff"
+
+    engine "murrine" {
+        gradient_shades   = { 1.0, 1.0, 1.0, 1.0 }
+        contrast          = 0.0
+        roundness         = 6
+    }
+}
+
+# ── Tooltips ───────────────────────────────────────────────
+style "snowfox-tooltip" {
+    bg[NORMAL]        = "#252525"
+    fg[NORMAL]        = "#e8e8e8"
+}
+
+# ============================================================
+#    Widget Assignments  (general -> specific)
+# ============================================================
+
+# Base for everything
+class "GtkWidget"                    style "snowfox-colors"
+
+# Lists, text fields
+class "GtkTreeView"                  style "snowfox-view"
+class "GtkIconView"                  style "snowfox-view"
+class "GtkTextView"                  style "snowfox-textview"
+
+# PCManFM main window / file view
+widget_class "*FmFolderView*"        style "snowfox-view"
+
+# Bars (before buttons, so toolbar buttons keep their button style)
+class "GtkMenuBar"                   style "snowfox-bars"
+class "GtkToolbar"                   style "snowfox-bars"
+widget_class "*<GtkToolbar>*"        style "snowfox-bars"
+
+# Controls
+class "GtkNotebook"                  style "snowfox-tabs"
+class "GtkEntry"                     style "snowfox-entry"
+class "GtkButton"                    style "snowfox-widgets"
+class "GtkScrollbar"                 style "snowfox-scrollbar"
+
+# Sidebar (highest priority, so nothing overrides it)
+widget_class "*FmSidePane*"          style:highest "snowfox-sidebar"
+widget_class "*FmPlacesView*"        style:highest "snowfox-sidebar"
+widget_class "*FmDirTreeView*"       style:highest "snowfox-sidebar"
+
+# Separator: only the Paned itself, not its children
+class "GtkPaned"                     style:highest "snowfox-separator"
+
+# Menus
+widget_class "*<GtkMenu>*"           style:highest "snowfox-menus"
+widget_class "*<GtkMenuItem>*"       style:highest "snowfox-menus"
+
+# Tooltips (GTK2 window names)
+widget "gtk-tooltip*"                style "snowfox-tooltip"
+widget "gtk-tooltips*"               style "snowfox-tooltip"

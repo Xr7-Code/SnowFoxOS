@@ -1,0 +1,24 @@
+/* ============================================================
+   SnowFoxOS v3.4 — GTK 4 Theme Overrides
+   Template: templates/gtk-4.0.css.tmpl
+   Rendered to: ~/.config/gtk-4.0/gtk.css
+   Theme: ${THEME_NAME}
+   Tokens: BG  ACCENT  FG
+   ============================================================ */
+
+@define-color accent_color            ${ACCENT};
+@define-color accent_bg_color         ${ACCENT};
+@define-color accent_fg_color         ${BG};
+@define-color window_bg_color         ${BG};
+@define-color window_fg_color         ${FG};
+@define-color view_bg_color           ${BG};
+@define-color view_fg_color           ${FG};
+
+selection {
+    background-color: ${ACCENT};
+    color:            ${BG};
+}
+
+*:focus {
+    outline-color: ${ACCENT};
+}

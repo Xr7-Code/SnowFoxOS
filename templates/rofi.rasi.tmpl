@@ -1,0 +1,81 @@
+/* ============================================================
+   SnowFoxOS v3.4 — Rofi Config
+   Template: templates/rofi.rasi.tmpl
+   Rendered to: ~/.config/rofi/config.rasi
+   Theme: ${THEME_NAME}
+   Tokens: BG  ACCENT  FG  (3 only)
+   ============================================================ */
+
+* {
+    bg:     ${BG};
+    accent: ${ACCENT};
+    fg:     ${FG};
+
+    background-color: transparent;
+    text-color:       @accent;
+    border-color:     @accent;
+    font: "JetBrainsMono Nerd Font 11";
+}
+
+window {
+    background-color: @bg;
+    border:           1px solid;
+    border-color:     @accent;
+    border-radius:    6px;
+    width:            320px;
+    padding:          0;
+}
+
+mainbox {
+    background-color: @bg;
+    children: [ inputbar, listview ];
+}
+
+inputbar {
+    background-color: @bg;
+    border-bottom:    1px solid;
+    border-color:     @accent;
+    padding:          8px 12px;
+    children: [ prompt, entry ];
+}
+
+prompt {
+    text-color:       @accent;
+    padding:          0 8px 0 0;
+    font:             "JetBrainsMono Nerd Font Bold 11";
+}
+
+entry {
+    text-color:       @accent;
+    placeholder:      "";
+    placeholder-color: @fg;
+}
+
+listview {
+    background-color: @bg;
+    padding:          6px 0;
+    lines:            6;
+    scrollbar:        false;
+}
+
+element {
+    background-color: @bg;
+    text-color:       @accent;
+    padding:          8px 14px;
+    opacity:          0.45;
+}
+
+element-icon {
+    size: 18px;
+    margin: 0 8px 0 0;
+}
+
+element selected {
+    background-color: @accent;
+    text-color:       @bg;
+    opacity:          1;
+}
+
+element-text {
+    vertical-align: 0.5;
+}

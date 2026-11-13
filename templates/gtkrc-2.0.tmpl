@@ -1,0 +1,20 @@
+# ============================================================
+#    SnowFoxOS v3.4 — GTK 2 Theme
+#    Template: templates/gtkrc-2.0.tmpl
+#    Rendered to: ~/.gtkrc-2.0
+#    Theme: ${THEME_NAME}
+# ============================================================
+
+gtk-theme-name   = "Arc-Dark"
+gtk-icon-theme-name = "Papirus-Dark"
+gtk-font-name    = "Inter 10"
+gtk-cursor-theme-name = "Adwaita"
+gtk-cursor-theme-size = 24
+
+style "snowfox-base" {
+    bg[SELECTED]   = "${ACCENT}"
+    fg[SELECTED]   = "${BG}"
+    base[SELECTED] = "${ACCENT}"
+    text[SELECTED] = "${BG}"
+}
+class "*" style "snowfox-base"

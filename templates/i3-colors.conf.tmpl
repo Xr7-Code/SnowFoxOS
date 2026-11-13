@@ -1,0 +1,24 @@
+# ============================================================
+#    SnowFoxOS v3.4 — i3 Window Colors
+#    Template: templates/i3-colors.conf.tmpl
+#    Rendered to: ~/.config/i3/colors.conf
+#    Theme: ${THEME_NAME}
+#    Tokens: BG  ACCENT  FG  (3 only)
+# ============================================================
+
+# Format: <class> <border> <background> <text> <indicator> <child_border>
+
+# Focused: accent border + bg, inverted text
+client.focused          ${ACCENT} ${ACCENT} ${BG}     ${ACCENT} ${ACCENT}
+
+# Focused but inactive (split container)
+client.focused_inactive ${BG}     ${BG}     ${FG}     ${BG}     ${BG}
+
+# Unfocused
+client.unfocused        ${BG}     ${BG}     ${FG}     ${BG}     ${BG}
+
+# Urgent: hardcoded red — not part of the 3-token palette
+client.urgent           #ff5555   #ff5555   ${BG}     #ff5555   #ff5555
+
+# Note: i3bar is intentionally not configured — Polybar is used instead.
+# If Polybar crashes, run: ~/.config/polybar/launch.sh

@@ -1,0 +1,62 @@
+# ============================================================
+#    SnowFoxOS v3.4 — Dunst Notifications
+#    Template: templates/dunstrc.tmpl
+#    Rendered to: ~/.config/dunst/dunstrc
+#    Theme: ${THEME_NAME}
+#    Tokens: BG  ACCENT  FG  (3 only)
+# ============================================================
+
+[global]
+    monitor               = 0
+    follow                = mouse
+    width                 = 320
+    height                = 100
+    origin                = top-right
+    offset                = 12x44
+    gap_size              = 6
+    padding               = 10
+    horizontal_padding    = 12
+    frame_width           = 1
+    separator_height      = 1
+    sort                  = yes
+
+    font                  = JetBrainsMono Nerd Font 10
+    line_height           = 0
+    markup                = full
+    format                = "<b>%s</b>\n%b"
+    alignment             = left
+    word_wrap             = yes
+    stack_duplicates      = true
+    show_count            = true
+    idle_threshold        = 120
+
+    # Icons
+    icon_position         = left
+    max_icon_size         = 24
+    icon_theme            = Papirus-Dark
+
+    browser               = firefox
+
+[urgency_low]
+    background            = "${BG}"
+    foreground            = "${FG}"
+    frame_color           = "${BG}"
+    timeout               = 4
+
+[urgency_normal]
+    background            = "${BG}"
+    foreground            = "${FG}"
+    frame_color           = "${ACCENT}"
+    timeout               = 6
+
+[urgency_critical]
+    background            = "${BG}"
+    foreground            = "${FG}"
+    frame_color           = "#ff5555"
+    timeout               = 0
+
+[shortcuts]
+    close     = ctrl+space
+    close_all = ctrl+shift+space
+    history   = ctrl+grave
+    context   = ctrl+shift+period
