@@ -161,6 +161,7 @@ if [[ "$SNOWFOX_PHASE" == "full" ]]; then
     source "$SCRIPT_DIR/lib/cleanup_final.sh"
 else
     # Phase-driven path. The module list lives in lib/phase.sh.
+    local rc=0
     while IFS= read -r mod; do
         [[ -z "$mod" ]] && continue
         run_module "$mod"
