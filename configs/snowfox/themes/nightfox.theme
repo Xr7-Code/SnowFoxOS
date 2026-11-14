@@ -1,0 +1,31 @@
+# SnowFoxOS theme: nightfox
+# Dark, black/grey surfaces + purple accent (#9B59B6)
+dark = true
+
+accent       = #9B59B6
+accent2      = #6C3483
+accent3      = #B07CC6
+bg           = #2B2F38
+bg2          = #343945
+fg           = #E5E9F0
+fg_dim       = #8A919E
+
+term.color0  = #3B4252
+term.color1  = #BF616A
+term.color2  = #A3BE8C
+term.color3  = #EBCB8B
+term.color4  = #81A1C1
+term.color5  = #9B59B6
+term.color6  = #88C0D0
+term.color7  = #E5E9F0
+term.color8  = #4C566A
+term.color9  = #D07A7F
+term.color10 = #B1C89A
+term.color11 = #E4CE91
+term.color12 = #93B5CC
+term.color13 = #B07CC6
+term.color14 = #9BCAD8
+term.color15 = #ECEFF4
+term.bg      = #2B2F38
+term.fg      = #E5E9F0
+term.cursor  = #9B59B6
