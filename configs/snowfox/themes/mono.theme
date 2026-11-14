@@ -1,0 +1,31 @@
+# SnowFoxOS theme: mono
+# Grayscale, accent = grey (pure monochrome)
+dark = true
+
+accent       = #A0A4AB
+accent2      = #6B6F78
+accent3      = #C8CCD2
+bg           = #1E2228
+bg2          = #2B2F38
+fg           = #E5E9F0
+fg_dim       = #7A7F88
+
+term.color0  = #2B2F38
+term.color1  = #7A7F88
+term.color2  = #8A919E
+term.color3  = #A0A4AB
+term.color4  = #B0B4BB
+term.color5  = #A0A4AB
+term.color6  = #C0C4CB
+term.color7  = #E5E9F0
+term.color8  = #4C566A
+term.color9  = #8A919E
+term.color10 = #A0A4AB
+term.color11 = #B0B4BB
+term.color12 = #C0C4CB
+term.color13 = #C8CCD2
+term.color14 = #D0D4DB
+term.color15 = #ECEFF4
+term.bg      = #1E2228
+term.fg      = #E5E9F0
+term.cursor  = #A0A4AB
