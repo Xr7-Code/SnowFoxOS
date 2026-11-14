@@ -7,11 +7,15 @@
 #   - Argument parsing, phase mapping and guards moved into
 #     lib/phase.sh (single source of truth).
 #   - The default (no-arg) flow is BYTE-FOR-BYTE the same as
-#     v3: same module order, same env exports, same hooks.
+#     v3: same module order, same env exports, same hooks —
+#     minus the three modules removed by plan §1
+#     (browser_selection.sh, mesh_module.sh, gaming_ai.sh).
 #   - --phase iso-base uses phase_modules() from phase.sh so
 #     the module list stays in one place.
 #   - --phase extras: deprecated alias -> warn + exit 0
 #     (handled inside phase_parse_args).
+#   - rc is declared explicitly (declare rc=0) instead of a
+#     shellcheck suppression.
 # ============================================================
 
 # ── Basic checks before sourcing lib ─────────────────────────
@@ -148,8 +152,12 @@ run_module() {
 }
 
 # ── Flow ───────────────────────────────────────────────────
+declare rc=0
+
 if [[ "$SNOWFOX_PHASE" == "full" ]]; then
-    # Default path — unchanged order and set, as in v3.
+    # Default path — unchanged order and set, as in v3, minus the
+    # modules removed by plan §1 (browser_selection, mesh_module,
+    # gaming_ai).
     source "$SCRIPT_DIR/lib/base_system.sh"
     source "$SCRIPT_DIR/lib/kernel_drivers.sh"
     source "$SCRIPT_DIR/lib/desktop_environment.sh"
@@ -161,7 +169,6 @@ if [[ "$SNOWFOX_PHASE" == "full" ]]; then
     source "$SCRIPT_DIR/lib/cleanup_final.sh"
 else
     # Phase-driven path. The module list lives in lib/phase.sh.
-    local rc=0
     while IFS= read -r mod; do
         [[ -z "$mod" ]] && continue
         run_module "$mod"
