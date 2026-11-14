@@ -38,3 +38,11 @@ Requires `libx11-dev` and `libimlib2-dev`.
 ## Not in v4.0
 
 Window list, tray, drag & drop. Planned for v4.1 if needed.
+
+## Known issues (v4.0)
+
+- **Tooltip is not wired up.** `draw_tooltip()` in `draw.c` is complete
+  and functional, but the main event loop in `main.c` does not call it.
+  Wiring it up needs a ~500 ms hover timer so it does not flicker while
+  the mouse moves across the dock. Planned for v4.1. In v4.0 the dock
+  shows only the hover inversion, no tooltip text.
