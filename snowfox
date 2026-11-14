@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# ============================================================
+#  SnowFoxOS v4 — snowfox CLI dispatcher
+#  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+# ============================================================
+#  Structure (plan §5):
+#   - plain-text names are primary; aliases are listed after
+#   - theme / wallpaper are top-level
+#   - removed: mesh, ai, music, immersion, node, tor
+#   - exit codes: 0 ok, 1 error, 75 network unavailable
+# ============================================================
+
+set -u
+set -o pipefail
+
+# Controlled environment (unchanged from v3)
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
+
+readonly UNAME_BIN="/usr/bin/uname"
+readonly READLINK_BIN="/usr/bin/readlink"
+readonly DIRNAME_BIN="/usr/bin/dirname"
+
+_self_path="${BASH_SOURCE[0]}"
+if [[ -x "$READLINK_BIN" ]]; then
+    _resolved=$("$READLINK_BIN" -f "$_self_path" 2>/dev/null) && _self_path="$_resolved"
+fi
+SCRIPT_DIR=$("$DIRNAME_BIN" "$_self_path")
+
+CLI_DIR="/usr/local/lib/snowfox/cli"
+if [[ ! -d "$CLI_DIR" ]]; then
+    if [[ "${SNOWFOX_DEV:-0}" == "1" && -d "$SCRIPT_DIR/cli" ]]; then
+        CLI_DIR="$SCRIPT_DIR/cli"
+        printf '\033[0;33m[warn]\033[0m using dev CLI directory: %s\n' "$CLI_DIR" >&2
+    else
+        printf '\033[0;31m[err]\033[0m CLI modules not found in %s\n' "$CLI_DIR" >&2
+        exit 1
+    fi
+fi
+
+_cli_require() {
+    local f="$CLI_DIR/$1"
+    [[ -f "$f" && -r "$f" ]] || { printf '\033[0;31m[err]\033[0m missing: %s\n' "$f" >&2; exit 1; }
+    # shellcheck disable=SC1090
+    source "$f" || { printf '\033[0;31m[err]\033[0m failed to load: %s\n' "$f" >&2; exit 1; }
+}
+
+# Modules (v4 set — removed: mesh, ai, music, immersion, node, tor)
+_cli_require utils.sh
+_cli_require help.sh
+_cli_require status.sh
+_cli_require system.sh
+_cli_require hardware.sh
+_cli_require security.sh
+_cli_require media.sh
+_cli_require desktop.sh
+_cli_require stash.sh
+_cli_require settings.sh
+_cli_require theme.sh
+_cli_require wallpaper.sh
+_cli_require doctor.sh
+_cli_require snap.sh
+
+# ─── Version ──────────────────────────────────────────────
+case "${1:-}" in
+    -v|version)
+        printf 'SnowFoxOS v4 (CLI v4.0.0)\n'
+        printf 'kernel: %s\n' "$("$UNAME_BIN" -r 2>/dev/null || echo unknown)"
+        exit 0
+        ;;
+esac
+
+# ─── Dispatcher ───────────────────────────────────────────
+case "${1:-}" in
+    # Help
+    h|help|-h|--help|"")  cmd_help ;;
+
+    # System & status
+    status|st)            cmd_status "${@:2}" ;;
+    update|up)            cmd_update ;;
+    profile|prof)         cmd_profile "${2:-}" ;;
+    doctor|doc)           cmd_doctor ;;
+    reset|rst)            cmd_reset ;;
+
+    # Hardware & privacy
+    kill)                 cmd_kill "${2:-}" ;;
+    air|airmode)          cmd_air "${2:-}" ;;
+    audit)                cmd_audit "${2:-}" ;;
+    gpu)                  cmd_gpu ;;
+
+    # Media
+    stream)               cmd_stream "${@:2}" ;;
+    download|dl)          cmd_download "${2:-}" ;;
+    fetch)                cmd_fetch "${2:-}" ;;
+
+    # Desktop
+    auto|autostart)       cmd_start "${2:-}" "${3:-}" ;;
+    layout|lay)           cmd_layout "${2:-}" ;;
+    web|webapp)           cmd_webapp "${2:-}" "${3:-}" "${4:-}" ;;
+
+    # Stash (package manager)
+    stash)                cmd_stash "${@:2}" ;;
+
+    # Theme (top-level, §5)
+    theme)                cmd_theme "${@:2}" ;;
+
+    # Wallpaper (top-level, §5)
+    wallpaper|wall)       cmd_wallpaper "${@:2}" ;;
+
+    # Settings
+    set|settings)         cmd_settings "${@:2}" ;;
+    bt|bluetooth)         cmd_bluetooth "${2:-}" ;;
+    kb|keyboard)          cmd_keyboard "${2:-}" ;;
+    lang|language)        cmd_language "${2:-}" ;;
+    tz|timezone)          cmd_timezone "${2:-}" ;;
+    user)                 cmd_user "${2:-}" "${3:-}" ;;
+    def|defaults)         cmd_defaults "${2:-}" "${3:-}" ;;
+
+    # Snapshots
+    snap)                 cmd_snap "${@:2}" ;;
+
+    # Fallback
+    *)
+        err "unknown command: $1"
+        printf '  try: %ssnowfox help%s\n' "${ACCENT:-}" "${RESET:-}"
+        exit 1
+        ;;
+esac
