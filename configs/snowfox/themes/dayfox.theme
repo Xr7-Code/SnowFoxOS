@@ -1,0 +1,31 @@
+# SnowFoxOS theme: dayfox
+# Light, paper surfaces + warm accent
+dark = false
+
+accent       = #B5651D
+accent2      = #8A4A14
+accent3      = #D98A3D
+bg           = #F5F0E8
+bg2          = #EAE3D8
+fg           = #2B2F38
+fg_dim       = #6B6F78
+
+term.color0  = #3B4252
+term.color1  = #A63D3D
+term.color2  = #4F7A3A
+term.color3  = #8A6D1F
+term.color4  = #4A6A8A
+term.color5  = #B5651D
+term.color6  = #3D7A7A
+term.color7  = #2B2F38
+term.color8  = #8A919E
+term.color9  = #C96A6A
+term.color10 = #7FB069
+term.color11 = #D4B86A
+term.color12 = #6A8AA8
+term.color13 = #D98A3D
+term.color14 = #6AA8A8
+term.color15 = #1E2228
+term.bg      = #F5F0E8
+term.fg      = #2B2F38
+term.cursor  = #B5651D
