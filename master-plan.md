@@ -33,7 +33,27 @@ Ziele v4:
 - Alle Bash-Skripte: #!/usr/bin/env bash, set -euo pipefail, shellcheck-clean.
 - Paketliste ohne Recommends (APT::Install-Recommends=false) — alles Nötige explizit.
 - Lizenz: GPL-3.0.
+- VERSION-Datei im Repo-Root enthält NUR die aktuelle Version (Semver, z. B. "4.0.0").
+  Alle Version-Referenzen (install.sh-Banner, snowfox CLI, os-release/PRETTY_NAME,
+  GRUB/Plymouth-Branding, build-stamp im ISO-Pfad, README-Badge) lesen sie aus
+  lib/utils.sh (get_version(): cat VERSION, trim, Validierung gegen Semver).
+  Keine hartcodierten Versionsnummern in anderen Dateien.
 ```
+
+---
+
+## 0b. Spezifikations-Entscheidungen aus Prompt 1 (verbindlich, gelten für alle Prompts)
+
+1. **Phasen-API = `lib/phase.sh`.** Kein Modul parst `--phase` selbst. Neue Phase = ein `case`-Eintrag in `phase_modules()` + Tabelleneintrag in `installer/phases.md`.
+2. **systemctl-Shim zentral** in `phase.sh` (`install_chroot_systemctl_shim`, aus v3-install.sh verschoben). Module rufen `systemd_safe <verb> <unit>` oder direkt `systemctl` (vom Shim abgefangen). Keine eigenen Chroot-Checks in Modulen.
+3. **`ask_install <prompt> [default=no]`** — kein Regex-Matching. Wer Auto-Install will, übergibt `yes` explizit (z. B. `ask_install "unattended-upgrades (security only)" yes`).
+4. **`extras` = toter Alias** mit Deprecation-Warnung + Exit 0. Prompt 7 entfernt den Aufruf aus `installer/overlay/40-firstboot.sh`; danach darf der Alias in v4.x gelöscht werden. Bis dahin nicht anfassen.
+5. **Load-Guards:** `_SNOWFOX_UTILS_LOADED`, `_SNOWFOX_PHASE_LOADED`, `_SNOWFOX_THEME_ENGINE_LOADED` (falls Prompt 2 eine `lib/theme_engine.sh` anlegt; `cli/theme.sh` wird dünner Wrapper).
+6. **Default-Flow-Parität:** `full` = v3-Reihenfolge minus `browser_selection.sh`, `mesh_module.sh`, `gaming_ai.sh`. Kein `--phase legacy-full`.
+7. **`set -euo pipefail`** nur in `install.sh` und eigenständigen CLI-Modulen, **nicht** in `lib/*.sh` (werden gesourcret).
+8. **`SCRIPT_DIR`** wird von `install.sh` exportiert und von allen Modulen nur gelesen. Reihenfolge in `install.sh`: source `utils.sh` → source `phase.sh` → `phase_parse_args "$@"`.
+9. **Exportierte Variablen** (`TARGET_USER`, `TARGET_HOME`, `HAS_NVIDIA/AMD/INTEL`, `IS_LAPTOP`, `SNOWFOX_NETWORK`, `DKMS_HOOKS_FILE`, `DEFAULT_*_DESKTOP`) setzt nur `install.sh` bzw. `detect_target_user`/`detect_hardware` — Module lesen sie nur. Ausnahme: `kernel_drivers.sh` verfeinert `HAS_*` (wie v3). `performance_security.sh` nutzt `[[ "${IS_LAPTOP:-false}" == "true" ]]` (Fix aus Prompt 5).
+10. **lib/firstboot.sh** existiert als Stub (wird von `phase_modules firstboot` erwartet; Lücke im Plan §1, durch Prompt 1 geschlossen).
 
 ---
 
@@ -41,6 +61,7 @@ Ziele v4:
 
 ```text
 SnowFoxOS/
+├── VERSION                         # NEU: einzige Version-Quelle (z. B. "4.0.0"), Single Source of Truth
 ├── install.sh                      # Einstieg: interaktiv (default) oder --phase <name>
 ├── snowfox                         # CLI-Dispatcher → /usr/local/bin/snowfox
 ├── lib/                            # Installations-Module (Steps, wie v3, refactored)
@@ -54,6 +75,7 @@ SnowFoxOS/
 │   ├── performance_security.sh     #   Step 6: zram, sysctl, UFW, DoT, unattended-upgrades, Dienste aus
 │   ├── theming_finishing.sh        #   Step 7: Theme-Engine-Setup, GTK 2/3/4, MIME, Fonts, Cursor
 │   ├── boot_screen.sh              #   Step 8: Plymouth + GRUB-Theme
+│   ├── firstboot.sh                #   Phase firstboot: Session-Reste, GPU-Retry (Stub aus Prompt 1)
 │   └── cleanup_final.sh            #   Final: autoremove, Banner
 ├── cli/                            # snowfox-CLI-Module (/usr/local/lib/snowfox/cli/)
 │   ├── utils.sh                    #   Farben, header/row/bar (neues, ruhigeres Design)
@@ -79,6 +101,7 @@ SnowFoxOS/
 │   │   └── palette.c / palette.h   #   liest ~/.config/snowfox/palette.conf, live-reload via SIGHUP
 │   ├── Makefile
 │   └── README.md
+├── configs/foxdock/dock.conf       # Dock-Einträge-Vorlage (wird in Prompt 3 angelegt)
 ├── configs/                        # Desktop-Konfigurationen → ~/.config/
 │   ├── i3/config
 │   ├── polybar/ (config.ini, launch.sh, scripts/)
@@ -359,7 +382,10 @@ Akzeptanz: Theme-Wechsel zweimal hin und her erzeugt byte-identische Configs
 Aufgabe: Implementiere foxdock gemäß Abschnitt 4 des Plans.
 
 1. foxdock/ mit src/main.c, config.c/h, launcher.c/h, draw.c/h, palette.c/h,
-   Makefile, README.md.
+   Makefile, README.md. Zusätzlich: configs/foxdock/dock.conf als Vorlage
+   (Beispieleinträge, Format name;icon;exec), die der Installer nach
+   ~/.config/foxdock/dock.conf kopiert — diese Lücke im Plan §1 ist inzwischen
+   im Baum nachgetragen.
 2. Reines X11/Xlib (+ Imlib2 für Icons, begründe die Wahl im README). Kein GTK/GLib.
 3. Features: vertikale Icon-Leiste links, sticky auf allen Workspaces, Einträge aus
    ~/.config/foxdock/dock.conf (Format name;icon;exec) plus Auto-Scan von
@@ -372,8 +398,8 @@ Aufgabe: Implementiere foxdock gemäß Abschnitt 4 des Plans.
    für den Setup-Pfad).
 7. Makefile: cc -O2 -Wall -Wextra -Werror, Target install (PREFIX-konform).
 
-Akzeptanz: kompiliert ohne Warnungen, läuft unter i3, Palette-Wechsel + killall
--USR1? nein: SIGHUP foxdock aktualisiert Farben live.
+Akzeptanz: kompiliert ohne Warnungen, läuft unter i3, Palette-Wechsel + SIGHUP
+foxdock aktualisiert Farben live.
 ```
 
 ---
@@ -390,6 +416,9 @@ Aufgabe: Redesign der snowfox-CLI gemäß Abschnitt 5 des Plans.
    keine ASCII-Art-Logos im Normalbetrieb.
 2. Alle Module aus Abschnitt 1 (cli/) auf das neue Design umstellen, Texte auf
    Englisch, Befehle mit Klartextnamen + Aliasen wie in Abschnitt 5.
+   KLARE TRENNUNG (aus Prompt 1): lib/ = Installer-Laufzeit, cli/ = System-Laufzeit.
+   Der snowfox-Dispatcher und alle cli/-Module nutzen ausschließlich cli/utils.sh,
+   NIE lib/utils.sh oder andere lib/-Dateien.
 3. Neue Top-Level-Befehle theme und wallpaper; status battery ersetzt bat.
 4. Exit-Codes: 0 ok, 1 Fehler, 75 Netzwerk nicht verfügbar.
 5. cli/help.sh: gruppierte Hilfe (System / Hardware & Privacy / Media / Desktop /
@@ -421,7 +450,9 @@ Aufgabe: Refactore die lib/-Module gemäß Abschnitt 6 und 7 des Plans.
    dokumentieren in docs/PACKAGES.md, fehlende Requires explizit in die Arrays).
 4. Chroot-Safety in allen Modulen: systemctl start/restart nur bei
    [ -d /run/systemd/system ], sonst enable; Session-abhängige Schritte nach
-   Phase firstboot auslagern.
+   Phase firstboot auslagern. Alle unset-Variablen absichern, insbesondere
+   IS_LAPTOP: if [[ "${IS_LAPTOP:-false}" == "true" ]] statt if $IS_LAPTOP
+   (Fix: v3 bricht bei ungesetzter Variable).
 5. Keine App-Empfehlungen: keine optionalen Extras ohne explizite Nutzeranfrage;
    ask_install im interaktiven Modus fragt, im Defaults-Mode nimmt es den Default.
 
@@ -475,6 +506,8 @@ wird 1:1 inhaltlich übernommen, nur mit den v4-Step-Nummern und Pfaden.
 3. installer/phases.md — Dokumentation der drei Phasen und Chroot-Regeln.
 4. Passe die Step-Nummern an die v4-lib/ an (kein browser_selection/mesh/gaming mehr;
    Browser-Installation gehört zu firstboot optional bzw. snowfox stash).
+   Entferne dabei den --phase extras-Aufruf aus 40-firstboot.sh (Entscheidung aus
+   Prompt 1, Punkt 4) und hake das TODO in installer/phases.md ab.
 5. Alles shellcheck-clean. Der eigentliche simple-cdd-Build kommt später (eigener
    Task), hier nur Vorbereitung + Trockenlauf-Skripte.
 
@@ -493,7 +526,10 @@ Aufgabe: Dokumentation und Tests für SnowFoxOS v4.
 
 1. README.md im v3-Stil, aber: Features/Stack auf v4-Kern (inkl. foxdock und
    Theme-System mit Auto-Palette), Screenshots-Platzhalter, englisch.
-2. PROJECT_STRUCTURE.md: exakte Beschreibung jeder Datei im v4-Layout (Abschnitt 1).
+2. PROJECT_STRUCTURE.md: exakte Beschreibung jeder Datei im v4-Layout (Abschnitt 1),
+   inklusive der durch Prompt 1 geschlossenen Lücken: lib/firstboot.sh (Stub aus
+   phase_modules firstboot) und configs/foxdock/dock.conf; außerdem die
+   install.sh-Source-Reihenfolge (utils.sh → phase.sh → phase_parse_args).
 3. docs/PACKAGES.md: Recommends-Audit-Ergebnisse aus Prompt 5.
 4. Test-Skripte: tests/qemu-install-test.sh (QEMU, --offline und --online, basierend
    auf der alten Work Order §7 Task 7/8) und tests/expect-install.exp.
