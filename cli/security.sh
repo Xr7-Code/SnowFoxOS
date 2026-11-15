@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
 # ============================================================
-#  SnowFoxOS v4 — CLI: security
-#  cmd_audit — one-shot and live network audit.
-#  (Implementation from v3, only header text adjusted.)
+#  SnowFoxOS v4 — CLI: security (network audit)
+#  (v3 hardened parser, v4 design system)
 # ============================================================
 
-# All v3 functions (cmd_audit, _audit_usage, _audit_preflight,
-# _audit_can_see_processes, _audit_parse_line, _audit_classify_ip,
-# _audit_render_row, _audit_render_snapshot_body, _audit_snapshot,
-# _audit_live) are copied verbatim from v3 security.sh.
-#
-# Only difference: header() / divider() / info() / err() now use
-# the v4 design system (already sourced via cli/utils.sh).
+if [[ -n "${_SNOWFOX_CLI_SECURITY_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+_SNOWFOX_CLI_SECURITY_LOADED=1
 
-# ─── Controlled environment ─────────────────────────────────
-# Never trust the caller's PATH (sudo without secure_path, ~/.bashrc, ...)
 export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 unset SHELL 2>/dev/null || true
 unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
@@ -27,8 +19,6 @@ readonly TR_BIN="/usr/bin/tr"
 readonly SED_BIN="/usr/bin/sed"
 readonly SLEEP_BIN="/usr/bin/sleep"
 
-# Debian 12 uses merged-usr; /bin is a symlink to /usr/bin.
-# Fallbacks keep this working if the layout ever differs.
 [[ -x "$SS_BIN" ]]      || SS_BIN="/bin/ss"
 [[ -x "$TIMEOUT_BIN" ]] || TIMEOUT_BIN="/bin/timeout"
 [[ -x "$AWK_BIN" ]]     || AWK_BIN="/usr/bin/gawk"
@@ -40,28 +30,12 @@ readonly SLEEP_BIN="/usr/bin/sleep"
 
 readonly SS_TIMEOUT=10
 
-# ============================================================
-#  snowfox audit — Active network connections
-# ============================================================
 cmd_audit() {
     case "${1:-}" in
-        live|ongoing|l)
-            _audit_live
-            return $?
-            ;;
-        ""|once|snapshot)
-            _audit_snapshot
-            return $?
-            ;;
-        -h|--help|help)
-            _audit_usage
-            return 0
-            ;;
-        *)
-            err "Unknown audit mode: $1"
-            _audit_usage
-            return 1
-            ;;
+        live|ongoing|l) _audit_live; return $? ;;
+        ""|once|snapshot) _audit_snapshot; return $? ;;
+        -h|--help|help) _audit_usage; return 0 ;;
+        *) err "unknown audit mode: $1"; _audit_usage; return "$SNOWFOX_EXIT_ERROR" ;;
     esac
 }
 
@@ -76,7 +50,6 @@ Modes:
 EOF
 }
 
-# ─── Preflight: ss present and usable? ──────────────────────
 _audit_preflight() {
     if [[ ! -x "$SS_BIN" ]]; then
         err "ss not found at $SS_BIN — install iproute2"
@@ -89,8 +62,6 @@ _audit_preflight() {
     return 0
 }
 
-# ─── Do we actually see process info? (empirical, not EUID) ─
-# Returns 0 if at least one socket exposes users:(...), 1 otherwise.
 _audit_can_see_processes() {
     local out
     out=$("$TIMEOUT_BIN" "$SS_TIMEOUT" "$SS_BIN" -tunpH 2>/dev/null) || return 1
@@ -98,10 +69,6 @@ _audit_can_see_processes() {
     printf '%s\n' "$out" | "$GREP_BIN" -q 'users:('
 }
 
-# ─── Parse one ss -tunpH line ───────────────────────────────
-# Sets globals: _p_proto _p_remote _p_proc
-# Returns 0 if the line represents an active (non-listening) connection,
-# 1 if it should be skipped.
 _audit_parse_line() {
     local line="$1"
     local netid state recvq sendq local_addr peer_addr proc_field
@@ -111,26 +78,18 @@ _audit_parse_line() {
     _p_remote=""
     _p_proc=""
 
-    # ss -tunpH field layout:
-    #   Netid State Recv-Q Send-Q Local Peer Process
-    # Process may be empty (no -p permission).
     read -r netid state recvq sendq local_addr peer_addr proc_field <<< "$line"
 
     _p_proto="$netid"
     _p_remote="$peer_addr"
 
-    # Skip sockets with no peer (listening) or wildcard peer.
     [[ -z "$_p_remote" ]] && return 1
     [[ "$_p_remote" == "*" || "$_p_remote" == "*:*" ]] && return 1
     [[ "$_p_remote" == "0.0.0.0:*" ]] && return 1
     [[ "$_p_remote" == "[::]:*" ]] && return 1
 
-    # Extract process name — all users:((...)) entries, not just first.
-    # Format: users:(("name",pid=...,fd=...),("name2",pid=...,fd=...))
     if [[ -n "$proc_field" ]]; then
-        # Sanitize to printable ASCII first (prevents terminal escapes)
         proc_field=$("$TR_BIN" -cd '[:print:]' <<< "$proc_field")
-        # Grab every quoted name after users:((
         proc=$("$GREP_BIN" -oP 'users:\(\(\("\K[^"]+' <<< "$proc_field" 2>/dev/null \
                | "$AWK_BIN" '!seen[$0]++' \
                | "$AWK_BIN" 'BEGIN{sep=""} {printf "%s%s", sep, $0; sep=","}')
@@ -139,7 +98,6 @@ _audit_parse_line() {
 
     _p_proc="$proc"
 
-    # Strip port / brackets from peer address to get bare IP.
     ip=$(printf '%s' "$_p_remote" \
          | "$SED_BIN" -E 's/^\[([^]]+)\]:[0-9]+$/\1/; s/^([^:]+):[0-9]+$/\1/')
     _p_remote="$ip"
@@ -147,28 +105,23 @@ _audit_parse_line() {
     return 0
 }
 
-# ─── Classify IP: sets _p_color ─────────────────────────────
 _audit_classify_ip() {
     local ip="$1"
     if printf '%s' "$ip" | "$GREP_BIN" -qE '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|127\.|169\.254\.|::1|fe80:|fc|fd)'; then
-        _p_color="${GRAY}"
+        _p_color="$FG_DIM"
     else
-        _p_color="${ORANGE}"
+        _p_color="$YELLOW"
     fi
 }
 
-# ─── Render one connection row ──────────────────────────────
 _audit_render_row() {
     local proc="$1" proto="$2" ip="$3" color="$4"
-    printf "  ${CYAN}%-24s${RESET} %-6s ${color}%s${RESET}\n" "$proc" "$proto" "$ip"
+    printf "  %s%-24s%s %-6s %s%s%s\n" "$ACCENT" "$proc" "$RESET" "$proto" "$color" "$ip" "$RESET"
 }
 
-# ─── Snapshot: shared worker ────────────────────────────────
-# Parses $1 (ss output) and prints rows. Sets _p_count.
 _audit_render_snapshot_body() {
     local ss_out="$1"
     local line count=0
-
     _p_count=0
 
     while IFS= read -r line; do
@@ -182,9 +135,8 @@ _audit_render_snapshot_body() {
     _p_count=$count
 }
 
-# ─── One-shot snapshot ───────────────────────────────────────
 _audit_snapshot() {
-    header "Network Audit"
+    header "snowfox audit"
 
     _audit_preflight || return 1
 
@@ -195,7 +147,7 @@ _audit_snapshot() {
     fi
 
     divider
-    printf "  ${BOLD}%-24s %-6s %s${RESET}\n" "Process" "Proto" "Destination"
+    printf "  %s%-24s %-6s %s%s\n" "$BOLD" "Process" "Proto" "Destination" "$RESET"
     divider
 
     local ss_out ss_rc
@@ -211,7 +163,6 @@ _audit_snapshot() {
     fi
 
     _audit_render_snapshot_body "$ss_out"
-
     divider
 
     if [[ $_p_count -eq 0 ]]; then
@@ -223,8 +174,6 @@ _audit_snapshot() {
     return 0
 }
 
-# ─── Live mode (Ctrl+C to exit) ──────────────────────────────
-# Replaces watch(1) which runs via sh -c and respects $PATH/$SHELL/$TERM.
 _audit_live() {
     _audit_preflight || return 1
 
@@ -237,8 +186,6 @@ _audit_live() {
     info "Live audit — press Ctrl+C to exit."
     "$SLEEP_BIN" 1
 
-    # Restore terminal state on any exit path.
-    # Save previous traps so we do not clobber the caller's.
     local _prev_int _prev_term _prev_exit
     _prev_int=$(trap -p INT)
     _prev_term=$(trap -p TERM)
@@ -248,17 +195,15 @@ _audit_live() {
         printf '\033[?25h\033[?1049l'
     }
 
-    # Enter alternate screen, hide cursor.
     printf '\033[?1049h\033[?25l'
     trap '_audit_live_cleanup; return 0' INT TERM EXIT
 
     local ss_out ss_rc line
     while true; do
-        # Re-render without a subshell; no eval, no sh -c.
         printf '\033[H\033[2J'
-        printf "  ${BOLD}SnowFoxOS Network Audit — live (Ctrl+C to exit)${RESET}\n"
+        printf "  %sSnowFoxOS Network Audit — live (Ctrl+C to exit)%s\n" "$BOLD" "$RESET"
         divider
-        printf "  ${BOLD}%-24s %-6s %s${RESET}\n" "Process" "Proto" "Destination"
+        printf "  %s%-24s %-6s %s%s\n" "$BOLD" "Process" "Proto" "Destination" "$RESET"
         divider
 
         ss_out=$("$TIMEOUT_BIN" "$SS_TIMEOUT" "$SS_BIN" -tunpH 2>/dev/null)
@@ -285,8 +230,6 @@ _audit_live() {
         "$SLEEP_BIN" 2
     done
 
-    # Unreachable — the trap returns on INT/TERM.
-    # Restore previous traps in case the loop ever exits normally.
     eval "${_prev_int:-trap - INT}"
     eval "${_prev_term:-trap - TERM}"
     eval "${_prev_exit:-trap - EXIT}"
