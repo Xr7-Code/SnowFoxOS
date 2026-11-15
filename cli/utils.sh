@@ -3,14 +3,6 @@
 #  SnowFoxOS v4 — CLI Utilities (quiet, minimal, English)
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
-#  Design principles (plan §5):
-#   - header: accent color, no ASCII art
-#   - key-value rows, fixed column width
-#   - status dots (● green/yellow/red), not long text
-#   - no spinner unless action > 2 s
-#   - English everywhere
-#   - exit codes: 0 ok, 1 error, 75 network unavailable
-# ============================================================
 
 if [[ -n "${_SNOWFOX_CLI_UTILS_LOADED:-}" ]]; then
     return 0 2>/dev/null || true
@@ -44,13 +36,13 @@ GREEN=$(_hex_to_ansi_fg "$(_cli_palette_get status_green '#7FB069')")
 YELLOW=$(_hex_to_ansi_fg "$(_cli_palette_get status_yellow '#D4B86A')")
 RED=$(_hex_to_ansi_fg "$(_cli_palette_get status_red '#C96A6A')")
 
-BOLD='\033[1m'
-DIM='\033[2m'
-RESET='\033[0m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+RESET=$'\033[0m'
 
-# Legacy aliases — kept so existing module bodies still resolve.
+# Legacy aliases
 PURPLE="$ACCENT"
-LPURPLE="$ACCENT$BOLD"
+LPURPLE="${ACCENT}${BOLD}"
 ORANGE="$YELLOW"
 CYAN="$ACCENT"
 GRAY="$FG_DIM"
@@ -81,11 +73,7 @@ row_dot() {
 }
 
 bool_row() {
-    if [[ "$2" == "true" ]]; then
-        row_dot "$1" ok "on"
-    else
-        row_dot "$1" err "off"
-    fi
+    if [[ "$2" == "true" ]]; then row_dot "$1" ok "on"; else row_dot "$1" err "off"; fi
 }
 
 info() { printf '  %s%s%s\n' "$FG_DIM" "$1" "$RESET"; }
@@ -106,7 +94,6 @@ hint() {
     printf '  %s  %s%s\n' "$FG_DIM" "$1" "$RESET"
 }
 
-# ─── Progress bar ──────────────────────────────────────────
 bar() {
     local val="${1:-0}" max="${2:-100}" width=20
     [[ "$max" -le 0 ]] && max=100
@@ -121,7 +108,6 @@ bar() {
     printf '] %s%s%%%s\n' "$BOLD" "$pct" "$RESET"
 }
 
-# ─── Spinner (only for actions > 2 s) ──────────────────────
 _SPIN_PID=""
 _SPIN_FRAMES=('·' '✻' '✽' '✶' '✳' '✢')
 
@@ -153,7 +139,6 @@ spin_ok()   { _spin_kill; ok "$1"; }
 spin_err()  { _spin_kill; err "$1"; }
 spin_warn() { _spin_kill; warn "$1"; }
 
-# ─── Human-readable bytes ──────────────────────────────────
 human_bytes() {
     local bytes="${1:-0}"
     if   [[ "$bytes" -ge 1073741824 ]]; then awk "BEGIN {printf \"%.1f GB\", $bytes/1073741824}"
@@ -163,7 +148,6 @@ human_bytes() {
     fi
 }
 
-# ─── Exit codes ────────────────────────────────────────────
 SNOWFOX_EXIT_OK=0
 SNOWFOX_EXIT_ERROR=1
 SNOWFOX_EXIT_NETWORK=75
