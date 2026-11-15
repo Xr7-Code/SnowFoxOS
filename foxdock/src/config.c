@@ -36,7 +36,6 @@ static void add_entry(DockConfig *cfg, const char *name, const char *icon, const
     e->exec = xstrdup(exec);
 }
 
-/* ---- minimal .desktop parser (Name/Icon/Exec/NoDisplay) ---- */
 static void parse_desktop_file(const char *path, DockConfig *cfg) {
     FILE *f = fopen(path, "r");
     if (!f) return;
@@ -92,7 +91,6 @@ int config_load(const char *path, DockConfig *cfg) {
     cfg->icon_size = 32;
     cfg->padding   = 6;
 
-    /* 1. Try the explicit dock.conf */
     FILE *f = fopen(path, "r");
     if (f) {
         char line[1024];
@@ -100,7 +98,6 @@ int config_load(const char *path, DockConfig *cfg) {
             trim(line);
             if (!*line || line[0] == '#') continue;
 
-            /* Optional header keys: icon_size=NN / padding=NN */
             if (!strncmp(line, "icon_size=", 10)) {
                 cfg->icon_size = atoi(line + 10);
                 continue;
@@ -122,7 +119,6 @@ int config_load(const char *path, DockConfig *cfg) {
         fclose(f);
     }
 
-    /* 2. If no entries, auto-scan /usr/share/applications */
     if (cfg->n_entries == 0) {
         DIR *d = opendir("/usr/share/applications");
         if (d) {
