@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Simple tooltip window (single, reused) */
+/* Tooltip primitive (kept; not wired into the main loop in v4.0) */
 static Window tip_win = 0;
 static GC     tip_gc  = 0;
 
@@ -33,12 +33,10 @@ static void draw_background(DockDraw *d) {
 }
 
 static int resolve_icon_path(const char *icon, char *out, size_t outsz) {
-    /* Absolute path wins */
     if (icon && icon[0] == '/') {
         snprintf(out, outsz, "%s", icon);
         return 0;
     }
-    /* Try common theme locations */
     const char *roots[] = {
         "/usr/share/icons/hicolor/48x48/apps",
         "/usr/share/icons/hicolor/32x32/apps",
@@ -62,14 +60,12 @@ static void draw_icon(DockDraw *d, const DockEntry *e, int idx, int y) {
     int x = d->padding;
     int size = d->icon_size;
 
-    /* Background square per icon: invert on hover (plan §4) */
-    unsigned long tile_bg    = (idx == d->hover_index) ? d->pal.accent : d->pal.bg;
-    unsigned long tile_fg    = (idx == d->hover_index) ? d->pal.bg     : d->pal.fg;
+    unsigned long tile_bg = (idx == d->hover_index) ? d->pal.accent : d->pal.bg;
+    unsigned long tile_fg = (idx == d->hover_index) ? d->pal.bg     : d->pal.fg;
 
     XSetForeground(d->dpy, d->gc, tile_bg);
     XFillRectangle(d->dpy, d->win, d->gc, x, y, (unsigned)size, (unsigned)size);
 
-    /* Load icon via Imlib2 into a pixmap, scaled to fit. */
     char path[1024];
     if (resolve_icon_path(e->icon, path, sizeof(path)) == 0) {
         imlib_context_set_display(d->dpy);
@@ -81,7 +77,6 @@ static void draw_icon(DockDraw *d, const DockEntry *e, int idx, int y) {
             imlib_render_image_on_drawable_at_size(x, y, size, size);
             imlib_free_image();
         } else {
-            /* Fallback: fill square with foreground colour */
             XSetForeground(d->dpy, d->gc, tile_fg);
             XDrawRectangle(d->dpy, d->win, d->gc, x + 2, y + 2,
                            (unsigned)(size - 4), (unsigned)(size - 4));
@@ -104,6 +99,8 @@ void draw_repaint(DockDraw *d, const DockConfig *cfg) {
     XFlush(d->dpy);
 }
 
+/* draw_tooltip is complete but NOT called from main.c in v4.0.
+ * Wiring it up requires a ~500 ms hover timer (see README "Known issues"). */
 static void draw_tooltip(DockDraw *d, const char *text, int x, int y) {
     if (!tip_win) {
         XSetWindowAttributes attrs;
