@@ -1,6 +1,7 @@
 /* ============================================================
  *  SnowFoxOS v4 — foxdock: palette loader implementation
  * ============================================================ */
+#define _POSIX_C_SOURCE 200809L
 #include "palette.h"
 
 #include <stdio.h>
@@ -8,7 +9,6 @@
 #include <string.h>
 #include <ctype.h>
 
-/* Raw string form (kept in a parallel struct during load) */
 typedef struct {
     char bg[8], bg2[8], fg[8], fg_dim[8];
     char accent[8], accent2[8], accent3[8];
@@ -90,42 +90,21 @@ static unsigned long hex_to_pixel(Display *dpy, int screen, const char *hex) {
     return xc.pixel;
 }
 
-int palette_load(const char *path, Palette *out) {
+int palette_reload(Display *dpy, int screen, const char *path, Palette *out) {
+    if (!dpy || !out) return -1;
     RawPalette r;
     if (parse_raw(path, &r) != 0) return -1;
-    /* pixel values are 0 until palette_to_pixels runs */
-    memset(out, 0, sizeof(*out));
-    out->dark = r.dark;
-    /* Stash hex strings in unused high bits? No — reload via tiny shim. */
-    /* We re-parse on palette_to_pixels, keeping this struct simple. */
-    /* Copy strings into a static buffer using well-known offsets. */
-    /* Simpler: store in a file-scope static. */
-    return 0;
-}
-
-/* ---------- file-scope stash of raw strings ---------- */
-static RawPalette g_raw;
-static int        g_loaded = 0;
-
-int palette_load_full(const char *path) {
-    if (parse_raw(path, &g_raw) != 0) return -1;
-    g_loaded = 1;
-    return 0;
-}
-
-int palette_to_pixels(Display *dpy, int screen, Palette *p) {
-    if (!g_loaded) return -1;
-    p->dark           = g_raw.dark;
-    p->bg             = hex_to_pixel(dpy, screen, g_raw.bg);
-    p->bg2            = hex_to_pixel(dpy, screen, g_raw.bg2);
-    p->fg             = hex_to_pixel(dpy, screen, g_raw.fg);
-    p->fg_dim         = hex_to_pixel(dpy, screen, g_raw.fg_dim);
-    p->accent         = hex_to_pixel(dpy, screen, g_raw.accent);
-    p->accent2        = hex_to_pixel(dpy, screen, g_raw.accent2);
-    p->accent3        = hex_to_pixel(dpy, screen, g_raw.accent3);
-    p->status_green   = hex_to_pixel(dpy, screen, g_raw.status_green);
-    p->status_yellow  = hex_to_pixel(dpy, screen, g_raw.status_yellow);
-    p->status_red     = hex_to_pixel(dpy, screen, g_raw.status_red);
-    p->status_orange  = hex_to_pixel(dpy, screen, g_raw.status_orange);
+    out->dark           = r.dark;
+    out->bg             = hex_to_pixel(dpy, screen, r.bg);
+    out->bg2            = hex_to_pixel(dpy, screen, r.bg2);
+    out->fg             = hex_to_pixel(dpy, screen, r.fg);
+    out->fg_dim         = hex_to_pixel(dpy, screen, r.fg_dim);
+    out->accent         = hex_to_pixel(dpy, screen, r.accent);
+    out->accent2        = hex_to_pixel(dpy, screen, r.accent2);
+    out->accent3        = hex_to_pixel(dpy, screen, r.accent3);
+    out->status_green   = hex_to_pixel(dpy, screen, r.status_green);
+    out->status_yellow  = hex_to_pixel(dpy, screen, r.status_yellow);
+    out->status_red     = hex_to_pixel(dpy, screen, r.status_red);
+    out->status_orange  = hex_to_pixel(dpy, screen, r.status_orange);
     return 0;
 }
