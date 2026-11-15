@@ -8,26 +8,15 @@
 #include <X11/Xlib.h>
 
 typedef struct {
-    int      dark;       /* 1 if dark theme, 0 otherwise */
-    unsigned long bg;    /* pixel value */
-    unsigned long bg2;
-    unsigned long fg;
-    unsigned long fg_dim;
-    unsigned long accent;
-    unsigned long accent2;
-    unsigned long accent3;
-    unsigned long status_green;
-    unsigned long status_yellow;
-    unsigned long status_red;
-    unsigned long status_orange;
+    int           dark;
+    unsigned long bg, bg2, fg, fg_dim;
+    unsigned long accent, accent2, accent3;
+    unsigned long status_green, status_yellow, status_red, status_orange;
 } Palette;
 
-/* Load palette from path. Returns 0 on success, -1 on failure.
- * Values are stored as #RRGGBB strings first and converted to
- * pixel values via XAllocColor by palette_to_pixels(). */
-int  palette_load(const char *path, Palette *out);
-
-/* Convert string colors to X pixel values for the given display/colormap. */
-int  palette_to_pixels(Display *dpy, int screen, Palette *p);
+/* Single entry point: parse the file, resolve to pixel values,
+ * fill *out. Returns 0 on success, -1 on failure (file missing,
+ * unreadable, or no display). */
+int palette_reload(Display *dpy, int screen, const char *path, Palette *out);
 
 #endif
