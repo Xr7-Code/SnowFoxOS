@@ -23,9 +23,9 @@
 #define DOCK_WIDTH_DEFAULT 64
 #define FALLBACK_PALETTE "/etc/snowfox/palette.conf"
 
-static volatile sig_atomic_t g_reload   = 0;
-static volatile sig_atomic_t g_quit     = 0;
-static volatile sig_atomic_t g_repaint  = 0;
+static volatile sig_atomic_t g_reload  = 0;
+static volatile sig_atomic_t g_quit    = 0;
+static volatile sig_atomic_t g_repaint = 0;
 
 static void on_sighup(int sig)  { (void)sig; g_reload  = 1; }
 static void on_sigterm(int sig) { (void)sig; g_quit    = 1; }
@@ -77,10 +77,10 @@ int main(void) {
     if (height < 200) height = 200;
 
     Palette pal;
-    if (palette_load_full(palette_path()) != 0) {
+    memset(&pal, 0, sizeof(pal));
+    if (palette_reload(dpy, screen, palette_path(), &pal) != 0) {
         fprintf(stderr, "foxdock: palette not found, using defaults\n");
     }
-    palette_to_pixels(dpy, screen, &pal);
 
     XSetWindowAttributes attrs;
     attrs.override_redirect = True;
@@ -94,11 +94,10 @@ int main(void) {
                                &attrs);
     XStoreName(dpy, win, "FoxDock");
 
-    /* _NET_WM_STRUT_PARTIAL: reserve space on the left edge */
     long strut[12] = {0};
-    strut[0]  = width;   /* left */
-    strut[4]  = 0;       /* left_start_y */
-    strut[5]  = (long)DisplayHeight(dpy, screen) - 1; /* left_end_y */
+    strut[0]  = width;
+    strut[4]  = 0;
+    strut[5]  = (long)DisplayHeight(dpy, screen) - 1;
     Atom strut_atom = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
     XChangeProperty(dpy, win, strut_atom, XA_CARDINAL, 32,
                     PropModeReplace, (unsigned char *)strut, 12);
@@ -144,9 +143,8 @@ int main(void) {
         if (g_reload) {
             g_reload = 0;
             Palette new_pal;
-            if (palette_load_full(palette_path()) == 0
-                && palette_to_pixels(dpy, screen, &new_pal) == 0) {
-                pal = new_pal;
+            if (palette_reload(dpy, screen, palette_path(), &new_pal) == 0) {
+                pal      = new_pal;
                 draw.pal = pal;
                 XSetWindowBackground(dpy, win, pal.bg);
                 XClearWindow(dpy, win);
@@ -156,7 +154,7 @@ int main(void) {
         if (g_repaint) { g_repaint = 0; draw_repaint(&draw, &cfg); }
         if (g_quit)    { running = 0; }
 
-        usleep(50000); /* 50 ms poll */
+        usleep(50000);
     }
 
     draw_cleanup(&draw);
