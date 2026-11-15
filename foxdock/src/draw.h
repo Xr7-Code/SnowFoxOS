@@ -14,8 +14,8 @@ typedef struct {
     int      height;
     int      icon_size;
     int      padding;
-    int      hover_index;   /* -1 if none */
-    int      active_index;  /* -1 if none */
+    int      hover_index;
+    int      active_index;
     Palette  pal;
 } DockDraw;
 
