@@ -20,8 +20,9 @@ theme_load() {
 
     local line key val
     while IFS= read -r line; do
-        line="${line%%#*}"
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+        
         if [[ "$line" =~ ^[[:space:]]*([A-Za-z0-9_.]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
             key="${BASH_REMATCH[1]}"
             val="${BASH_REMATCH[2]}"
@@ -52,12 +53,16 @@ theme_load() {
 
     _theme_derive_terminal
     _theme_derive_status
+
+    # Icon Theme Defaults
+    if [[ -z "${THEME_ICON_COLOR:-}" ]]; then THEME_ICON_COLOR="violet"; fi
+    if [[ -z "${THEME_ICON_THEME:-}" ]]; then THEME_ICON_THEME="Papirus-Dark"; fi
+    export THEME_ICON_COLOR THEME_ICON_THEME
 }
 
 _theme_derive_terminal() {
     local dark="${THEME_DARK:-true}"
     
-    # Base term colors
     if [[ -z "${THEME_TERM_BG:-}" ]]; then THEME_TERM_BG="${THEME_BG}"; fi
     if [[ -z "${THEME_TERM_FG:-}" ]]; then THEME_TERM_FG="${THEME_FG}"; fi
     if [[ -z "${THEME_TERM_CURSOR:-}" ]]; then THEME_TERM_CURSOR="${THEME_ACCENT}"; fi
@@ -152,6 +157,8 @@ _theme_write_palette() {
         echo "status_yellow=${THEME_STATUS_YELLOW}"
         echo "status_red=${THEME_STATUS_RED}"
         echo "status_orange=${THEME_STATUS_ORANGE}"
+        echo "icon_color=${THEME_ICON_COLOR}"
+        echo "icon_theme=${THEME_ICON_THEME}"
     } > "$tmp"
     chmod 0644 "$tmp"
     mv -f "$tmp" "$PALETTE_FILE"
@@ -366,8 +373,8 @@ shadow-opacity = 0.25;
 shadow-color = "${THEME_BG}";
 fading = false;
 corner-radius = 12;
-backend = "glx";
-vsync = true;
+backend = "xrender";
+vsync = false;
 EOF
 )
     _render_block "$f" "# BEGIN SNOWFOX PALETTE" "# END SNOWFOX PALETTE" "$content"
@@ -378,7 +385,7 @@ _render_xsettingsd() {
     local content
     content=$(cat <<EOF
 Net/ThemeName "${THEME_GTK_THEME:-Arc-Dark}"
-Net/IconThemeName "${THEME_GTK_ICON:-Papirus-Dark}"
+Net/IconThemeName "${THEME_ICON_THEME:-Papirus-Dark}"
 Gtk/CursorThemeName "${THEME_GTK_CURSOR:-Bibata-Modern-Classic}"
 Gtk/CursorThemeSize 24
 EOF
@@ -394,7 +401,7 @@ _render_gtk_settings() {
     content=$(cat <<EOF
 [Settings]
 gtk-theme-name=${THEME_GTK_THEME:-Arc-Dark}
-gtk-icon-theme-name=${THEME_GTK_ICON:-Papirus-Dark}
+gtk-icon-theme-name=${THEME_ICON_THEME:-Papirus-Dark}
 gtk-font-name=Inter 11
 gtk-cursor-theme-name=${THEME_GTK_CURSOR:-Bibata-Modern-Classic}
 gtk-cursor-theme-size=24
@@ -427,7 +434,7 @@ _render_gtk2() {
     content=$(cat <<EOF
 # SnowFoxOS palette (generated)
 gtk-theme-name = "${THEME_GTK_THEME:-Arc-Dark}"
-gtk-icon-theme-name = "${THEME_GTK_ICON:-Papirus-Dark}"
+gtk-icon-theme-name = "${THEME_ICON_THEME:-Papirus-Dark}"
 gtk-font-name = "Inter 11"
 gtk-cursor-theme-name = "${THEME_GTK_CURSOR:-Bibata-Modern-Classic}"
 gtk-cursor-theme-size = 24
@@ -444,7 +451,7 @@ _render_qtct() {
 style=gtk2
 color_scheme_path=
 custom_palette=false
-icon_theme=${THEME_GTK_ICON:-Papirus-Dark}
+icon_theme=${THEME_ICON_THEME:-Papirus-Dark}
 EOF
 )
     _render_block "$f" "# BEGIN SNOWFOX PALETTE" "# END SNOWFOX PALETTE" "$content"
@@ -459,6 +466,12 @@ theme_apply() {
     fi
     theme_load "$file" || return 1
     theme_render_all
+
+    # Apply Papirus folder color if the tool is installed
+    if command -v papirus-folders >/dev/null 2>&1; then
+        papirus-folders -t "$THEME_ICON_THEME" -C "$THEME_ICON_COLOR" -u >/dev/null 2>&1 || true
+    fi
+
     local sel="${TARGET_HOME:-$HOME}/.config/snowfox/theme"
     mkdir -p "$(dirname "$sel")"
     printf '%s\n' "$name" > "$sel"
