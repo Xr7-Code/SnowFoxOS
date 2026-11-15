@@ -10,6 +10,10 @@ bg2          = #1E2028
 fg           = #E5E9F0
 fg_dim       = #8A919E
 
+# Icon theme
+icon_color   = violet
+icon_theme   = Papirus-Dark
+
 term.color0  = #1E2028
 term.color1  = #BF616A
 term.color2  = #A3BE8C
@@ -29,4 +33,3 @@ term.color15 = #ECEFF4
 term.bg      = #15161A
 term.fg      = #E5E9F0
 term.cursor  = #9B59B6
-
