@@ -26,25 +26,21 @@ int launcher_run(const char *exec_cmd, int slot_index) {
     if (!exec_cmd || slot_index < 0 || slot_index >= MAX_SLOTS) return -1;
     long t = now_ms();
     if (last_ms[slot_index] && (t - last_ms[slot_index]) < DEBOUNCE_MS) {
-        return 0; /* treat as success, just debounced */
+        return 0;
     }
     last_ms[slot_index] = t;
 
     pid_t pid = fork();
     if (pid < 0) return -1;
     if (pid == 0) {
-        /* double-fork so the child is reparented to init when
-         * we exit, avoiding zombies in the dock process. */
         pid_t pid2 = fork();
         if (pid2 < 0) _exit(127);
         if (pid2 > 0) _exit(0);
-        /* grandchild: detach, exec shell */
         prctl(PR_SET_PDEATHSIG, 0);
         setsid();
         execl("/bin/sh", "sh", "-c", exec_cmd, (char *)NULL);
         _exit(127);
     }
-    /* reap the intermediate child */
     waitpid(pid, NULL, 0);
     return 0;
 }
