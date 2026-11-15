@@ -9,6 +9,10 @@ _SNOWFOX_CLI_SYSTEM_LOADED=1
 
 cmd_update() {
     header "snowfox update"
+    if [[ $EUID -ne 0 ]]; then
+        err "This command must be run as root (try: sudo snowfox update)"
+        return "$SNOWFOX_EXIT_ERROR"
+    fi
     if ! command -v apt-get >/dev/null 2>&1; then
         err "apt-get not found"
         return "$SNOWFOX_EXIT_ERROR"
