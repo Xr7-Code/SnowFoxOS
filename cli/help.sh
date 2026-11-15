@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================
 #  SnowFoxOS v4 — CLI: help
-#  Grouped layout (plan §5): System / Hardware & Privacy / Media /
-#  Desktop / Theme / Settings / Snapshots
 # ============================================================
+
+if [[ -n "${_SNOWFOX_CLI_HELP_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+_SNOWFOX_CLI_HELP_LOADED=1
 
 cmd_help() {
     printf '\n'
     printf '%s%s  SnowFoxOS v4%s\n' "$ACCENT" "$BOLD" "$RESET"
-    printf '%s  snowfox CLI%s\n' "$FG_DIM" "$RESET"
-    printf '\n'
+    printf '%s  snowfox CLI%s\n\n' "$FG_DIM" "$RESET"
 
     _help_group() {
         printf '  %s%s%s%s\n' "$ACCENT" "$BOLD" "$1" "$RESET"
         printf '  %s%s%s\n' "$FG_DIM" "$(printf '─%.0s' $(seq 1 46))" "$RESET"
     }
     _help_item() {
-        printf '  %s%-30s%s %s%s%s\n' "$FG" "$1" "$RESET" "$FG_DIM" "$2" "$RESET"
+        printf '  %s%-32s%s %s%s%s\n' "$FG" "$1" "$RESET" "$FG_DIM" "$2" "$RESET"
     }
 
     _help_group "System"
