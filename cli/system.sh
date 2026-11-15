@@ -4,20 +4,23 @@
 #  update / profile / reset
 # ============================================================
 
+if [[ -n "${_SNOWFOX_CLI_SYSTEM_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+_SNOWFOX_CLI_SYSTEM_LOADED=1
+
 cmd_update() {
     header "snowfox update"
     if ! command -v apt-get >/dev/null 2>&1; then
         err "apt-get not found"
-        return 1
+        return "$SNOWFOX_EXIT_ERROR"
     fi
     if ! timeout 5 bash -c 'exec 3<>/dev/tcp/deb.debian.org/80' 2>/dev/null; then
         err "network unavailable"
         return "$SNOWFOX_EXIT_NETWORK"
     fi
     info "apt-get update"
-    apt-get update -qq || { err "apt-get update failed"; return 1; }
+    apt-get update -qq || { err "apt-get update failed"; return "$SNOWFOX_EXIT_ERROR"; }
     info "apt-get upgrade"
-    apt-get upgrade -y || { err "apt-get upgrade failed"; return 1; }
+    apt-get upgrade -y || { err "apt-get upgrade failed"; return "$SNOWFOX_EXIT_ERROR"; }
     ok "system updated"
 }
 
@@ -49,13 +52,12 @@ cmd_profile() {
             ;;
         privacy)
             header "profile: privacy"
-            # Tighten: enable DoT strict, flush resolv cache, no telemetry
             systemctl restart systemd-resolved 2>/dev/null || true
             row_dot "DNS" ok "DoT strict"
             ;;
         *)
             err "unknown profile: $which"
-            return 1
+            return "$SNOWFOX_EXIT_ERROR"
             ;;
     esac
 }
@@ -75,14 +77,13 @@ cmd_reset() {
     read -rp "  type 'RESET' to continue: " confirm
     if [[ "$confirm" != "RESET" ]]; then
         info "aborted"
-        return 0
+        return "$SNOWFOX_EXIT_OK"
     fi
     info "resetting…"
-    # Delegate to the installer's wipe logic if present
     if [[ -x /usr/local/bin/snowfox-reset ]]; then
         /usr/local/bin/snowfox-reset
     else
         err "snowfox-reset not installed"
-        return 1
+        return "$SNOWFOX_EXIT_ERROR"
     fi
 }
