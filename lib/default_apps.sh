@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/lib/checksums.sh"
 step "5/10 — Terminal & Default Apps"
 
 if [[ "${SNOWFOX_PHASE:-full}" != "full" ]]; then
-    info "ISO phase: network-only default apps are handled by snowfox-setup"
+    info "ISO phase: network-only default apps are installed via snowfox stash"
 elif ! grep -q "bookworm-backports" /etc/apt/sources.list 2>/dev/null; then
     info "Adding bookworm-backports for yt-dlp..."
     echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware" \
