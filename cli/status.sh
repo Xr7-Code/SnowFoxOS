@@ -2,9 +2,9 @@
 # ============================================================
 #  SnowFoxOS v4 — CLI: status
 # ============================================================
-#  snowfox status          → system overview
-#  snowfox status battery  → battery details (v3's `bat`)
-# ============================================================
+
+if [[ -n "${_SNOWFOX_CLI_STATUS_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+_SNOWFOX_CLI_STATUS_LOADED=1
 
 cmd_status() {
     case "${1:-}" in
@@ -17,24 +17,19 @@ cmd_status() {
 
 _status_overview() {
     header "snowfox status"
-
-    # Host
     row "Host" "$(hostname 2>/dev/null || echo unknown)"
 
-    # OS / kernel
     local os="SnowFoxOS v4"
     [[ -r /etc/os-release ]] && os="$(. /etc/os-release && echo "$PRETTY_NAME")"
     row "OS" "$os"
     row "Kernel" "$(uname -r)"
 
-    # Uptime
     if [[ -r /proc/uptime ]]; then
         local up_s
         up_s=$(awk '{printf "%d", $1}' /proc/uptime)
         row "Uptime" "$(printf '%dd %02dh %02dm' $((up_s/86400)) $((up_s%86400/3600)) $((up_s%3600/60)))"
     fi
 
-    # Memory (PSS is not directly readable; use MemAvailable as proxy)
     if [[ -r /proc/meminfo ]]; then
         local total_kb avail_kb used_kb
         total_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
@@ -43,17 +38,14 @@ _status_overview() {
         row "Memory" "$(human_bytes $((used_kb * 1024))) / $(human_bytes $((total_kb * 1024)))"
     fi
 
-    # Disk
     if command -v df >/dev/null 2>&1; then
         local df_out
         df_out=$(df -h --output=used,size,pcent / 2>/dev/null | tail -n1)
         [[ -n "$df_out" ]] && row "Disk /" "$(echo "$df_out" | awk '{print $1 " / " $2 " (" $3 ")"}')"
     fi
 
-    # Load
     [[ -r /proc/loadavg ]] && row "Load" "$(awk '{print $1, $2, $3}' /proc/loadavg)"
 
-    # Status dots
     section "Status"
     _dot_ufw
     _dot_ssh
@@ -61,7 +53,6 @@ _status_overview() {
     _dot_unattended
     _dot_foxdock
 
-    # Battery (only on laptops)
     if _is_laptop; then
         section "Battery"
         _status_battery
