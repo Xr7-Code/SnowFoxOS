@@ -10,6 +10,10 @@ bg2          = #EAE3D8
 fg           = #2B2F38
 fg_dim       = #6B6F78
 
+# Icon theme
+icon_color   = orange
+icon_theme   = Papirus-Dark
+
 term.color0  = #3B4252
 term.color1  = #A63D3D
 term.color2  = #4F7A3A
@@ -29,4 +33,3 @@ term.color15 = #1E2228
 term.bg      = #F5F0E8
 term.fg      = #2B2F38
 term.cursor  = #B5651D
-
