@@ -1,15 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ============================================================
-#  SnowFoxOS v3.0 — Base System Setup
+#  SnowFoxOS v4 — Base System Setup
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
-# ============================================================
-#  CHANGED (security):
-#   - fastfetch download now uses _fetch_verified (SHA256-pinned)
-#   - curl calls constrained to HTTPS + TLS 1.2
-#   - JSON parsing prefers jq, falls back to python3
-#   - PATH extension moved to /etc/profile.d/ (drop-in, idempotent)
-#   - DKMS_HOOKS no longer exported as array (Bash limitation);
-#     defined locally here, restored in theming_finishing.sh
 # ============================================================
 
 source "$SCRIPT_DIR/lib/utils.sh"
@@ -20,9 +12,6 @@ sleep 1
 
 step "1/10 — System update"
 
-# CHANGED: define locally instead of relying on an exported array.
-# Bash cannot export arrays; the previous `export DKMS_HOOKS=(...)`
-# only worked by accident because this file redefined it.
 DKMS_HOOKS=(
     /etc/kernel/postinst.d/dkms
     /etc/kernel/prerm.d/dkms
@@ -33,12 +22,16 @@ for hook in "${DKMS_HOOKS[@]}"; do
 done
 info "DKMS hooks disabled for installer run"
 
-systemctl disable apt-daily.service apt-daily.timer 2>/dev/null || true
-systemctl disable apt-daily-upgrade.service apt-daily-upgrade.timer 2>/dev/null || true
-systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+systemd_safe disable apt-daily.service
+systemd_safe disable apt-daily.timer
+systemd_safe disable apt-daily-upgrade.service
+systemd_safe disable apt-daily-upgrade.timer
+systemd_safe stop apt-daily.service
+systemd_safe stop apt-daily-upgrade.service
 success "apt-daily disabled"
 
-cat > /etc/apt/sources.list << 'EOF'
+if [[ "${SNOWFOX_PHASE:-full}" == "full" ]]; then
+    cat > /etc/apt/sources.list <<'EOF'
 deb http://deb.debian.org/debian/ bookworm main contrib non-free non-free-firmware
 deb-src http://deb.debian.org/debian/ bookworm main contrib non-free non-free-firmware
 deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
@@ -47,66 +40,70 @@ deb http://deb.debian.org/debian/ bookworm-updates main contrib non-free non-fre
 deb-src http://deb.debian.org/debian/ bookworm-updates main contrib non-free non-free-firmware
 EOF
 
-wait_apt
-dpkg --add-architecture i386
-apt-get update -qq
-dpkg --configure -a 2>/dev/null || true
-apt-get -f install -y 2>/dev/null || true
-wait_apt
-apt-get upgrade -y
-apt-get install -y \
-    curl wget git unzip \
-    build-essential \
-    ca-certificates \
-    aria2 \
-    fzf \
-    jq \
-    lz4 \
-    gnupg \
-    pciutils usbutils \
-    htop btop irqbalance \
-    bash-completion \
-    xdg-utils \
-    xdg-user-dirs \
-    rfkill \
-    systemd-resolved \
-    iw wireless-tools \
-    imagemagick \
-    bc \
-    xorg \
-    xinit \
-    x11-utils \
-    x11-xserver-utils \
-    xclip \
-    xdotool \
-    dbus-x11 \
-    lm-sensors \
-    qt5ct \
-    qt5-style-plugins \
-    qt6ct
+    wait_apt
+    dpkg --add-architecture i386
+    apt-get update -qq
+    dpkg --configure -a 2>/dev/null || true
+    apt-get -f install -y 2>/dev/null || true
+    wait_apt
+    apt-get upgrade -y
+else
+    info "ISO phase: keeping installer-provided APT sources (no dist-upgrade)"
+    dpkg --add-architecture i386
+    wait_apt
+    apt-get update -qq 2>/dev/null || warn "apt-get update failed — using the local ISO pool only"
+    dpkg --configure -a 2>/dev/null || true
+    apt-get -f install -y 2>/dev/null || true
+fi
 
-# CHANGED: jq added to package list above (JSON parsing for GitHub API).
+audit_recommends() {
+    local out="/var/log/snowfox/recommends-audit.log"
+    install -d -m 0755 "$(dirname "$out")"
+    : > "$out"
 
-# ── Disable dnsmasq (conflicts with systemd-resolved) ────────
-info "Disabling dnsmasq..."
-systemctl stop dnsmasq 2>/dev/null || true
-systemctl disable dnsmasq 2>/dev/null || true
-systemctl mask dnsmasq 2>/dev/null || true
-success "dnsmasq disabled"
+    local pkg
+    for pkg in "$@"; do
+        local with rec without
+        with=$(apt-get install -s --no-install-recommends "$pkg" 2>/dev/null \
+               | awk '/^Inst / {print $2}' | sort -u)
+        rec=$(apt-get install -s "$pkg" 2>/dev/null \
+               | awk '/^Inst / {print $2}' | sort -u)
+        without=$(comm -13 <(printf '%s\n' "$with") <(printf '%s\n' "$rec"))
+        if [[ -n "$without" ]]; then
+            {
+                echo "== $pkg =="
+                printf '%s\n' "$without" | sed 's/^/  + /'
+                echo
+            } >> "$out"
+        fi
+    done
+    info "Recommends audit written to $out"
+}
 
-# ── Enable systemd-resolved ──────────────────────────────────
-info "Enabling systemd-resolved..."
-systemctl enable --now systemd-resolved 2>/dev/null || true
-ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf 2>/dev/null || true
-success "systemd-resolved enabled"
+BASE_PACKAGES=(
+    curl wget git unzip
+    ca-certificates aria2 fzf jq lz4 gnupg
+    pciutils usbutils htop btop irqbalance
+    bash-completion sudo openssh-client
+    xdg-utils xdg-user-dirs
+    rfkill wpasupplicant wireless-regdb
+    systemd-resolved systemd-timesyncd
+    iw wireless-tools
+    imagemagick bc
+    xorg xserver-xorg-legacy xinit
+    x11-utils x11-xserver-utils
+    xclip xdotool dbus-x11
+    lm-sensors
+    qt5ct qt5-style-plugins qt6ct
+    libx11-dev libimlib2-dev
+    feh
+)
+[[ "${SNOWFOX_PHASE:-full}" == "full" ]] && BASE_PACKAGES+=(build-essential)
 
-# ── PATH extension for /usr/sbin ─────────────────────────────
-# CHANGED: drop-in file instead of appending to /etc/profile and
-# ~/.bashrc. Idempotent (overwrite, not append) and survives
-# profile regeneration.
-info "Adding /usr/sbin to PATH..."
-cat > /etc/profile.d/99-snowfox-path.sh << 'EOF'
-# Added by SnowFoxOS installer
+audit_recommends "${BASE_PACKAGES[@]}"
+apt-get install -y "${BASE_PACKAGES[@]}"
+
+cat > /etc/profile.d/99-snowfox-path.sh <<'EOF'
 case ":$PATH:" in
     *:/usr/sbin:*) ;;
     *) export PATH="$PATH:/usr/sbin" ;;
@@ -114,86 +111,70 @@ esac
 EOF
 chmod 0644 /etc/profile.d/99-snowfox-path.sh
 
-# User-level: same guard, appended once to ~/.bashrc
-if ! grep -q '99-snowfox-path' "/home/$TARGET_USER/.bashrc" 2>/dev/null; then
-    cat >> "/home/$TARGET_USER/.bashrc" << 'EOF'
-
-# Added by SnowFoxOS installer
-case ":$PATH:" in
-    *:/usr/sbin:*) ;;
-    *) export PATH="$PATH:/usr/sbin" ;;
-esac
-EOF
+if [[ "${SNOWFOX_PHASE:-full}" != "full" ]]; then
+    info "Generating locales selected in debian-installer..."
+    apt-get install -y locales
+    SEL_LANG="$(sed -n 's/^LANG=//p' /etc/default/locale 2>/dev/null | tr -d '"' | head -n1)"
+    [[ -z "$SEL_LANG" ]] && SEL_LANG="${LANG:-en_US.UTF-8}"
+    for loc in "$SEL_LANG" "en_US.UTF-8"; do
+        [[ -z "$loc" || "$loc" == "C" || "$loc" == "POSIX" ]] && continue
+        [[ "$loc" == *.* ]] || loc="${loc}.UTF-8"
+        grep -q "^${loc} " /etc/locale.gen 2>/dev/null || {
+            sed -i "s/^# *${loc} /${loc} /" /etc/locale.gen 2>/dev/null || true
+            grep -q "^${loc} " /etc/locale.gen 2>/dev/null || \
+                echo "$loc UTF-8" >> /etc/locale.gen
+        }
+    done
+    locale-gen
+    success "ISO locale preserved: ${SEL_LANG}"
 fi
-chown "$TARGET_USER:$TARGET_USER" "/home/$TARGET_USER/.bashrc" 2>/dev/null || true
-success "PATH extension installed"
 
-sudo -u "$TARGET_USER" xdg-user-dirs-update
+if [[ "${SNOWFOX_PHASE:-full}" == "full" ]]; then
+    sudo -u "$TARGET_USER" xdg-user-dirs-update
+else
+    info "ISO phase: XDG user dirs deferred to firstboot"
+fi
 success "System updated"
 
-# ── Install fastfetch (SHA256-pinned) ───────────────────────
-# CHANGED: entire download path rewritten.
-#   - API call constrained to HTTPS + TLS 1.2
-#   - jq preferred, python3 as fallback
-#   - every downloaded .deb is verified via _verify_checksum
-#   - fail-closed: unpinned hash aborts the installer
 info "Installing fastfetch (verified)..."
 
-# _fetch_verified ist jetzt in lib/utils.sh definiert
-FASTFETCH_DEB_URL=""
-if command -v jq >/dev/null 2>&1; then
-    FASTFETCH_DEB_URL=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 \
-        https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest 2>/dev/null \
-        | jq -r '.assets[]? | select(.name | endswith("amd64.deb")) | .browser_download_url' \
-        | head -n1)
-else
-    FASTFETCH_DEB_URL=$(curl -fsSL --proto '=https' --tlsv1.2 --max-time 30 \
-        https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest 2>/dev/null \
-        | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    for a in data.get('assets', []):
-        if a['name'].endswith('amd64.deb'):
-            print(a['browser_download_url'])
-            break
-except Exception:
-    pass
-" 2>/dev/null)
-fi
-
-if [[ -z "$FASTFETCH_DEB_URL" ]]; then
-    warn "Could not resolve fastfetch release URL from GitHub API."
-    warn "Falling back to the known release path."
-    FASTFETCH_DEB_URL="https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb"
-fi
-
-if _fetch_verified "$FASTFETCH_DEB_URL" /tmp/fastfetch.deb \
-        "$CHECKSUM_FASTFETCH" "fastfetch"; then
-    if dpkg -i /tmp/fastfetch.deb 2>/dev/null; then
-        success "fastfetch installed"
-    else
-        warn "fastfetch .deb failed to install — install manually"
+_fetch_verified() {
+    local url="$1" dest="$2" expected="$3" name="$4"
+    local tmp
+    tmp=$(mktemp) || error "mktemp failed"
+    if ! curl -fsSL --proto '=https' --tlsv1.2 --max-time 120 "$url" -o "$tmp"; then
+        rm -f "$tmp"; warn "Download failed: $url — skipping $name"; return 1
     fi
-    rm -f /tmp/fastfetch.deb
+    _verify_checksum "$tmp" "$expected" "$name" || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$dest"; chmod 0644 "$dest"
+}
+
+if [[ "${SNOWFOX_PHASE:-full}" != "full" && "${SNOWFOX_NETWORK:-online}" == "offline" ]]; then
+    info "ISO offline: skipping optional fastfetch download"
 else
-    warn "fastfetch skipped — pin CHECKSUM_FASTFETCH in lib/checksums.sh"
+    FASTFETCH_DEB_URL="https://github.com/fastfetch-cli/fastfetch/releases/download/${FASTFETCH_VERSION}/fastfetch-linux-amd64.deb"
+    if _fetch_verified "$FASTFETCH_DEB_URL" /tmp/fastfetch.deb \
+            "$CHECKSUM_FASTFETCH" "fastfetch"; then
+        dpkg -i /tmp/fastfetch.deb 2>/dev/null \
+            && success "fastfetch installed" \
+            || warn "fastfetch .deb failed to install — install manually"
+        rm -f /tmp/fastfetch.deb
+    fi
 fi
 
-# ── X11 / startx without sudo ────────────────────────────────
 mkdir -p /etc/X11
-cat > /etc/X11/Xwrapper.config << 'XWEOF'
+cat > /etc/X11/Xwrapper.config <<'EOF'
 allowed_users=anybody
 needs_root_rights=auto
-XWEOF
-success "Xwrapper.config set (allowed_users=anybody, needs_root_rights=auto)"
+EOF
+success "Xwrapper.config set"
 
-info "Setting groups for $TARGET_USER (video, input, render, tty, audio)..."
-for grp in video input render tty audio; do
+info "Setting groups for $TARGET_USER (sudo, video, input, render, tty, audio)..."
+for grp in sudo video input render tty audio; do
     if getent group "$grp" > /dev/null 2>&1; then
         usermod -aG "$grp" "$TARGET_USER"
     else
         warn "Group '$grp' not found — skipping"
     fi
 done
-success "Groups set — $TARGET_USER can use startx without sudo"
+success "Groups set for $TARGET_USER"

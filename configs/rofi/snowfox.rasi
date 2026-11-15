@@ -1,0 +1,99 @@
+/* ============================================================
+ *  SnowFoxOS v4 — Rofi theme layout
+ *  Static asset. Consumes the color variables that the renderer
+ *  writes into config.rasi's marker block. NOT a render target.
+ *
+ *  Design (plan §2.2):
+ *   - one background (bg) for the window and all modules
+ *   - no outer border on the window
+ *   - capsules get a small radius, no colour
+ *   - normal text is the accent colour; selected is inverted
+ *   - generous padding between window edge and capsules
+ * ============================================================ */
+
+* {
+    bg:       #15161A;
+    bg2:      #1E2028;
+    fg:       #E5E9F0;
+    fg-dim:   #8A919E;
+    accent:   #9B59B6;
+
+    background-color: @bg;
+    text-color:       @accent;
+    border:           0;
+    margin:           0;
+    padding:          0;
+    spacing:          0;
+}
+
+window {
+    width:            20%;
+    location:         center;
+    anchor:           center;
+    background-color: @bg;
+    border:           0;
+    border-radius:    0;
+    padding:          30px;
+}
+
+mainbox {
+    background-color: @bg;
+    children:         [ inputbar, listview ];
+    spacing:          4px;
+}
+
+inputbar {
+    background-color: @bg;
+    text-color:       @accent;
+    padding:          2px 4px;
+    border-radius:    4px;
+    children:         [ prompt, entry ];
+}
+
+prompt {
+    background-color: @bg;
+    text-color:       @accent;
+    padding:          0 6px 0 0;
+}
+
+entry {
+    background-color: @bg;
+    text-color:       @accent;
+    placeholder:      "Search…";
+    placeholder-color: @fg-dim;
+}
+
+listview {
+    background-color: @bg;
+    lines:            7;
+    columns:          1;
+    spacing:          2px;
+    scrollbar:        false;
+    border-radius:    4px;
+}
+
+element {
+    background-color: @bg;
+    text-color:       @accent;
+    padding:          2px 4px;
+    spacing:          4px;
+    border-radius:    4px;
+}
+
+element selected {
+    background-color: @accent;
+    text-color:       @bg;
+    border-radius:    4px;
+}
+
+element-icon {
+    size:             1em;
+    background-color: inherit;
+}
+
+element-text {
+    background-color: inherit;
+    text-color:       inherit;
+    vertical-align:   0.5;
+}
+

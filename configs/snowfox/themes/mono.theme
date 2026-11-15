@@ -5,12 +5,12 @@ dark = true
 accent       = #A0A4AB
 accent2      = #6B6F78
 accent3      = #C8CCD2
-bg           = #1E2228
-bg2          = #2B2F38
+bg           = #101114
+bg2          = #181A1E
 fg           = #E5E9F0
 fg_dim       = #7A7F88
 
-term.color0  = #2B2F38
+term.color0  = #181A1E
 term.color1  = #7A7F88
 term.color2  = #8A919E
 term.color3  = #A0A4AB
@@ -26,6 +26,7 @@ term.color12 = #C0C4CB
 term.color13 = #C8CCD2
 term.color14 = #D0D4DB
 term.color15 = #ECEFF4
-term.bg      = #1E2228
+term.bg      = #101114
 term.fg      = #E5E9F0
 term.cursor  = #A0A4AB
+

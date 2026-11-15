@@ -1,16 +1,16 @@
 # SnowFoxOS theme: nightfox
-# Dark, black/grey surfaces + purple accent (#9B59B6)
+# Dark, almost-black surfaces + purple accent
 dark = true
 
 accent       = #9B59B6
 accent2      = #6C3483
 accent3      = #B07CC6
-bg           = #2B2F38
-bg2          = #343945
+bg           = #15161A
+bg2          = #1E2028
 fg           = #E5E9F0
 fg_dim       = #8A919E
 
-term.color0  = #3B4252
+term.color0  = #1E2028
 term.color1  = #BF616A
 term.color2  = #A3BE8C
 term.color3  = #EBCB8B
@@ -26,6 +26,7 @@ term.color12 = #93B5CC
 term.color13 = #B07CC6
 term.color14 = #9BCAD8
 term.color15 = #ECEFF4
-term.bg      = #2B2F38
+term.bg      = #15161A
 term.fg      = #E5E9F0
 term.cursor  = #9B59B6
+

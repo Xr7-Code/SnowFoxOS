@@ -1,0 +1,48 @@
+#### Localization — intentionally NOT preseeded: asked interactively
+# d-i debian-installer/language, /locale, /country, keymap
+# tzsetup-udeb time/zone
+
+#### Network & identity
+# Interface selection (Ethernet vs. WLAN) and WLAN credentials stay interactive,
+# exactly like stock Debian — netcfg/choose_interface deliberately NOT preseeded.
+d-i netcfg/hostname string snowfox
+d-i netcfg/get_domain string
+
+#### Mirror — silent
+d-i mirror/protocol string http
+d-i mirror/country string auto
+d-i mirror/suite string bookworm
+
+#### Accounts — passwords asked interactively (never preseed these)
+d-i passwd/root-login boolean true
+d-i passwd/make-user boolean true
+
+#### Clock
+d-i clock-setup/utc boolean true
+d-i clock-setup/ntp boolean true
+
+#### Partitioning — intentionally NOT preseeded: full standard partman UI
+
+#### APT setup — silent
+d-i apt-setup/services-select multiselect security, updates
+d-i apt-setup/contrib boolean true
+d-i apt-setup/non-free boolean true
+d-i apt-setup/non-free-firmware boolean true
+d-i apt-setup/enable-source-repositories boolean false
+
+#### Package selection — nothing via tasksel; snowfox late.sh installs the real list
+tasksel-udeb tasksel/first multiselect
+d-i pkgsel/include string
+d-i pkgsel/upgrade select none
+d-i pkgsel/updatedb boolean false
+popularity-contest popularity-contest/participate boolean false
+
+#### Bootloader — silent
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/bootdev string default
+d-i debian-installer/splash boolean true
+
+#### Finish + handover to SnowFoxOS
+d-i cdrom-detect/eject boolean true
+d-i finish-install/reboot_in_progress note
+d-i preseed/late_command string cp -a /cdrom/snowfox /target/snowfox-install ; in-target bash /snowfox-install/late.sh

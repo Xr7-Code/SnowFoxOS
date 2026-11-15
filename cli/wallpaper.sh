@@ -31,7 +31,6 @@ elif [[ -r /usr/local/lib/snowfox/lib/theme_engine.sh ]]; then
     source /usr/local/lib/snowfox/lib/theme_engine.sh
 else
     err "theme_engine.sh not found (repo or /usr/local/lib/snowfox/lib)"
-    # Do not exit — cmd_wallpaper set / list still work
 fi
 
 WALL_DIR="${WALL_DIR:-$HOME/Pictures/wallpapers}"
@@ -81,7 +80,6 @@ _wall_set() {
     local img="${1:-}"
     [[ -z "$img" ]] && { err "usage: snowfox wallpaper set <path>"; return 1; }
     if [[ ! -f "$img" ]]; then
-        # allow bare filenames in ~/Pictures/wallpapers
         if [[ -f "$WALL_DIR/$img" ]]; then
             img="$WALL_DIR/$img"
         else
@@ -123,20 +121,17 @@ _wall_gui() {
     done
     [[ ${#entries[@]} -eq 0 ]] && { info "no wallpapers found"; return 0; }
 
-    # "auto" entry first, then wallpapers
     local choice
     choice=$(printf 'auto\n%s\n' "$(printf '%s\n' "${entries[@]}")" \
              | rofi -dmenu -p "wallpaper" -no-custom)
     [[ -z "$choice" ]] && return 0
 
     if [[ "$choice" == "auto" ]]; then
-        # derive from the currently-set wallpaper if we know it
         local current=""
         [[ -f "$WALL_CONF" ]] && current="$(sed -n 's/^source=//p' "$WALL_CONF" | tail -n1)"
         if [[ -n "$current" && -f "$current" ]]; then
             _wall_auto "$current"
         else
-            # else ask with a second rofi pass
             local pick
             pick=$(printf '%s\n' "${entries[@]}" | rofi -dmenu -p "auto from")
             [[ -z "$pick" ]] && return 0
@@ -165,7 +160,6 @@ _wall_auto() {
 
     header "snowfox wallpaper auto"
 
-    # 1. downscale to <= 256 px on the long edge
     local tmp
     tmp="$(mktemp --suffix=.png)"
     if ! convert "$src" -resize '256x256>' "$tmp" 2>/dev/null; then
@@ -174,7 +168,6 @@ _wall_auto() {
         return 1
     fi
 
-    # 2. extract 8 dominant colours as #RRGGBB lines
     local -a colours=()
     local line
     while IFS= read -r line; do
@@ -194,9 +187,6 @@ _wall_auto() {
             "$((16#${c:1:2}))" "$((16#${c:3:2}))" "$((16#${c:5:2}))")"
     done
 
-    # 3. heuristic (dark theme is the default; light only if the
-    #    image is very bright — a rough proxy: the brightest colour
-    #    is lighter than #CCCCCC and the darkest is lighter than #777777)
     local dark=true
     local darkest brightest
     darkest="$(  _wall_pick_extreme "${colours[@]}" dark)"
@@ -205,21 +195,17 @@ _wall_auto() {
         dark=false
     fi
 
-    # bg: darkest for dark themes, brightest for light themes
     local bg
     if $dark; then bg="$darkest"; else bg="$brightest"; fi
 
-    # accent: highest saturation with contrast >= 3.0 vs bg
     local accent=""
     local -a sorted
     mapfile -t sorted < <(_wall_sort_by_saturation "${colours[@]}")
     local cand
     for cand in "${sorted[@]}"; do
-        # skip colours too close to bg
         [[ "$cand" == "$bg" ]] && continue
         local cr
         cr="$(_wall_contrast "$cand" "$bg")"
-        # cr is an integer * 100 (3.0 -> 300)
         if (( cr >= 300 )); then
             accent="$cand"; break
         fi
@@ -229,12 +215,10 @@ _wall_auto() {
         warn "no colour met contrast 3.0 vs bg — using active accent ($accent)"
     fi
 
-    # accent2 / accent3: ±15° hue shift of accent
     local accent2 accent3
-    accent2="$(_wall_hue_shift "$accent" -15 0.85)"   # slightly darker
-    accent3="$(_wall_hue_shift "$accent" +15 1.15)"   # slightly lighter
+    accent2="$(_wall_hue_shift "$accent" -15 0.85)"
+    accent3="$(_wall_hue_shift "$accent" +15 1.15)"
 
-    # fg: near-white on dark bg, near-black on light bg
     local fg fg_dim
     if $dark; then
         fg="#F5F5F5"
@@ -244,7 +228,6 @@ _wall_auto() {
         fg_dim="#5A6068"
     fi
 
-    # 4. write wallpaper-auto.theme
     mkdir -p "$(dirname "$WALL_THEME_PATH")"
     cat > "$WALL_THEME_PATH" <<EOF
 # SnowFoxOS theme: ${WALL_THEME_NAME}
@@ -261,7 +244,6 @@ fg_dim  = ${fg_dim}
 EOF
     success "theme written: $WALL_THEME_PATH"
 
-    # 5. activate via theme engine
     if theme_apply "$WALL_THEME_NAME"; then
         success "theme applied: $WALL_THEME_NAME"
     else
@@ -269,14 +251,11 @@ EOF
         return 1
     fi
 
-    # 6. log source
     _wall_log_source "$src"
-
     return 0
 }
 
 # ── helpers ────────────────────────────────────────────────
-# Given a list of #RRGGBB colours, print the darkest or brightest.
 _wall_pick_extreme() {
     local mode="$1"; shift
     local best="" best_val=-1 v
@@ -292,7 +271,6 @@ _wall_pick_extreme() {
     printf '%s\n' "$best"
 }
 
-# Sort colours by saturation (highest first).
 _wall_sort_by_saturation() {
     local c
     for c in "$@"; do
@@ -300,14 +278,12 @@ _wall_sort_by_saturation() {
     done | sort -k2 -nr | cut -f1
 }
 
-# Luma (0-255) from #RRGGBB using Rec.601 weights.
 _wall_luma() {
     local c="$1"
     local r=$((16#${c:1:2})) g=$((16#${c:3:2})) b=$((16#${c:5:2}))
     echo $(( (299*r + 587*g + 114*b) / 1000 ))
 }
 
-# Saturation (0-255) as max-min of RGB.
 _wall_saturation() {
     local c="$1"
     local r=$((16#${c:1:2})) g=$((16#${c:3:2})) b=$((16#${c:5:2}))
@@ -319,27 +295,22 @@ _wall_saturation() {
     echo $(( max - min ))
 }
 
-# Contrast ratio (WCAG) * 100. Range ~100..2100. 4.5 -> 450, 3.0 -> 300.
 _wall_contrast() {
     local a="$1" b="$2"
     local la lb ha hb
     la="$(_wall_rel_luma "$a")"
     lb="$(_wall_rel_luma "$b")"
     if (( la > lb )); then ha=$la; hb=$lb; else ha=$lb; hb=$la; fi
-    # rel luma is x1000; ratio = (ha+50)/(hb+50) -> scale by 100
     echo $(( (ha + 50) * 100 / (hb + 50) ))
 }
 
-# Relative luminance (WCAG) * 1000 from #RRGGBB.
 _wall_rel_luma() {
     local c="$1"
     local r=$((16#${c:1:2})) g=$((16#${c:3:2})) b=$((16#${c:5:2}))
-    # linearise
     local lr lg lb
     lr=$(_wall_linearize "$r")
     lg=$(_wall_linearize "$g")
     lb=$(_wall_linearize "$b")
-    # 0.2126*lr + 0.7152*lg + 0.0722*lb, scaled by 1000
     echo $(( (2126*lr + 7152*lg + 722*lb) / 10000 ))
 }
 
@@ -348,15 +319,10 @@ _wall_linearize() {
     if (( v <= 10 )); then
         echo $(( v * 1000 / 3294 ))
     else
-        # (v/255 + 0.055)/1.055 ^ 2.4, approximated with gamma 2.2
-        # (cheap, monotonic, within ~3% of the exact curve for the
-        # purpose of ranking colours)
         echo $(( (v * v) / 65 ))
     fi
 }
 
-# Shift hue of #RRGGBB by degrees, scale lightness by factor.
-# Implemented in awk for HSL roundtrip without bc.
 _wall_hue_shift() {
     local hex="$1" deg="$2" scale="$3"
     awk -v hex="$hex" -v deg="$deg" -v scale="$scale" '
@@ -374,6 +340,14 @@ _wall_hue_shift() {
     }
     function max(a,b){return a>b?a:b}
     function min(a,b){return a<b?a:b}
+    function hue2rgb(p, q, t,   r) {
+        if (t < 0) t += 1
+        if (t > 1) t -= 1
+        if (t < 1/6) return p + (q - p) * 6 * t
+        if (t < 1/2) return q
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
+        return p
+    }
     BEGIN {
         h = substr(hex, 2, 6)
         r = hex2dec(substr(h,1,2)) / 255
@@ -395,19 +369,10 @@ _wall_hue_shift() {
         while (hh >= 1) hh -= 1
         l = l * scale
         if (l < 0) l = 0; if (l > 1) l = 1
-        # HSL -> RGB
         if (s == 0) { r = g = b = l }
         else {
             q = (l < 0.5) ? l * (1 + s) : l + s - l * s
             p = 2 * l - q
-            function hue2rgb(p, q, t,   r) {
-                if (t < 0) t += 1
-                if (t > 1) t -= 1
-                if (t < 1/6) return p + (q - p) * 6 * t
-                if (t < 1/2) return q
-                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
-                return p
-            }
             r = hue2rgb(p, q, hh + 1/3)
             g = hue2rgb(p, q, hh)
             b = hue2rgb(p, q, hh - 1/3)

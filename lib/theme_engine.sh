@@ -3,54 +3,35 @@
 #  SnowFoxOS v4 — Theme Engine
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
-#  Loads .theme files (Key=Value), validates required keys,
-#  derives terminal colors, renders every component config
-#  in-place (idempotent), and writes palette.conf atomically
-#  so foxdock's SIGHUP never sees a half-written file.
-#
-#  Design rules (plan §2.2):
-#   - one bg per surface, one accent for text/highlight
-#   - active/selected = INVERTED (bg = accent, fg = bg)
-#   - NO transparency anywhere (no alpha, no opacity)
-#   - semantic status colors derived, not stored in themes
-# ============================================================
 
 if [[ -n "${_SNOWFOX_THEME_ENGINE_LOADED:-}" ]]; then
     return 0 2>/dev/null || true
 fi
 _SNOWFOX_THEME_ENGINE_LOADED=1
 
-# Paths (overridable for tests)
 THEME_DIR="${THEME_DIR:-${TARGET_HOME:-$HOME}/.config/snowfox/themes}"
 PALETTE_FILE="${PALETTE_FILE:-${TARGET_HOME:-$HOME}/.config/snowfox/palette.conf}"
 THEME_BACKUP="${THEME_BACKUP:-${TARGET_HOME:-$HOME}/.config/snowfox/theme-backup.tar.gz}"
 CONFIG_ROOT="${CONFIG_ROOT:-${TARGET_HOME:-$HOME}/.config}"
 
-# ── Theme file parsing ───────────────────────────────────────
-# theme_load <path>  ->  exports THEME_* vars (accent, bg, ...)
-# Unknown keys are exported as THEME_<upper> for forward-compat.
 theme_load() {
     local file="$1"
     [[ -r "$file" ]] || { echo "theme_load: cannot read $file" >&2; return 1; }
 
     local line key val
     while IFS= read -r line; do
-        # strip comments and surrounding whitespace
         line="${line%%#*}"
         [[ "$line" =~ ^[[:space:]]*$ ]] && continue
         if [[ "$line" =~ ^[[:space:]]*([A-Za-z0-9_.]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
             key="${BASH_REMATCH[1]}"
             val="${BASH_REMATCH[2]}"
-            # trim trailing whitespace from val
             val="${val%"${val##*[![:space:]]}"}"
-            # Normalise key: dark -> DARK, term.color0 -> TERM_COLOR0
             key="${key//./_}"
             key="${key^^}"
             export "THEME_${key}=${val}"
         fi
     done < "$file"
 
-    # Required keys (plan §2.1): 7 core colors + dark
     local req
     for req in ACCENT ACCENT2 ACCENT3 BG BG2 FG FG_DIM DARK; do
         if [[ -z "${!THEME_${req}:-}" ]]; then
@@ -59,7 +40,6 @@ theme_load() {
         fi
     done
 
-    # Validate hex format for core colors
     local c
     for c in ACCENT ACCENT2 ACCENT3 BG BG2 FG FG_DIM; do
         if [[ ! "${!THEME_${c}}" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
@@ -68,15 +48,11 @@ theme_load() {
         fi
     done
 
-    # Derive terminal colors if absent (plan §2.1)
     _theme_derive_terminal
-    # Derive semantic status colors (plan §2.2 rule 5)
     _theme_derive_status
 }
 
 _theme_derive_terminal() {
-    # term.bg / term.fg / term.cursor default from core palette.
-    # 16 ANSI slots: sensible fixed defaults that respect bg/fg.
     local dark="${THEME_DARK:-true}"
     : "${THEME_TERM_BG:=${THEME_BG}}"
     : "${THEME_TERM_FG:=${THEME_FG}}"
@@ -94,7 +70,6 @@ _theme_derive_terminal() {
         : "${THEME_TERM_COLOR7:=${THEME_BG2}}"
         : "${THEME_TERM_COLOR15:=${THEME_BG}}"
     fi
-    # ANSI 1-6 / 9-14: fixed hue defaults; accent overrides 5/13
     : "${THEME_TERM_COLOR1:=#BF616A}"
     : "${THEME_TERM_COLOR2:=#A3BE8C}"
     : "${THEME_TERM_COLOR3:=#EBCB8B}"
@@ -114,8 +89,6 @@ _theme_derive_terminal() {
 }
 
 _theme_derive_status() {
-    # Fixed hues, brightness nudged toward bg for readability.
-    # green / yellow / red / orange — never stored in .theme files.
     if [[ "${THEME_DARK:-true}" == "true" ]]; then
         export THEME_STATUS_GREEN="#7FB069"
         export THEME_STATUS_YELLOW="#D4B86A"
@@ -129,7 +102,6 @@ _theme_derive_status() {
     fi
 }
 
-# ── Theme listing / validation ───────────────────────────────
 theme_list() {
     local f name
     for f in "$THEME_DIR"/*.theme; do
@@ -155,8 +127,6 @@ theme_check() {
     return $rc
 }
 
-# ── Atomic palette write ─────────────────────────────────────
-# foxdock reads palette.conf on SIGHUP. Never truncate in place.
 _theme_write_palette() {
     local dir tmp
     dir="$(dirname "$PALETTE_FILE")"
@@ -181,11 +151,6 @@ _theme_write_palette() {
     mv -f "$tmp" "$PALETTE_FILE"
 }
 
-# ── Renderer ─────────────────────────────────────────────────
-# Replaces known color values in-place. Idempotent by construction:
-# it rewrites from a canonical marker block, not by string-replacing
-# arbitrary hex values (which would be fragile and non-idempotent).
-# Backup taken once per invocation before any file is touched.
 theme_render_all() {
     local files=(
         "$CONFIG_ROOT/i3/config"
@@ -232,7 +197,6 @@ theme_render_all() {
     _theme_write_palette
 }
 
-# Backup helpers (single tarball per render, plan §2.3)
 _theme_backup_tmp=""
 _theme_backup_add() {
     if [[ -z "$_theme_backup_tmp" ]]; then
@@ -249,14 +213,8 @@ _theme_backup_flush() {
     _theme_backup_tmp=""
 }
 
-# ── Per-component renderers ──────────────────────────────────
-# Strategy: each config carries a canonical marker block. We
-# remove everything between BEGIN/END and rewrite it. This is
-# idempotent: same theme -> byte-identical file.
-
 _render_block() {
     local file="$1" begin="$2" end="$3" content="$4"
-    # Remove old block, then append fresh one
     if grep -qF "$begin" "$file" 2>/dev/null; then
         awk -v b="$begin" -v e="$end" '
             index($0,b){skip=1; next}
@@ -264,7 +222,6 @@ _render_block() {
             !skip
         ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
     fi
-    # Ensure trailing newline before block
     [[ -s "$file" ]] && tail -c1 "$file" | grep -q $'\n' || echo >> "$file"
     {
         echo "$begin"
@@ -392,17 +349,17 @@ EOF
 
 _render_picom() {
     local f="$1"
-    # plan §2.2 rule 4: fully opaque, no fading, no blur.
     local content
     content=$(cat <<EOF
 # SnowFoxOS palette (generated) — opacity is ALWAYS 1.0
 shadow = true;
-shadow-radius = 7;
-shadow-offset-x = -7;
-shadow-offset-y = -7;
+shadow-radius = 20;
+shadow-offset-x = -10;
+shadow-offset-y = 6;
+shadow-opacity = 0.25;
 shadow-color = "${THEME_BG}";
 fading = false;
-corner-radius = 6;
+corner-radius = 12;
 backend = "glx";
 vsync = true;
 EOF
@@ -487,8 +444,6 @@ EOF
     _render_block "$f" "# BEGIN SNOWFOX PALETTE" "# END SNOWFOX PALETTE" "$content"
 }
 
-# ── Public entry points ──────────────────────────────────────
-# theme_apply <name>: load, render all, persist selection.
 theme_apply() {
     local name="$1"
     local file="$THEME_DIR/${name}.theme"
@@ -498,11 +453,9 @@ theme_apply() {
     fi
     theme_load "$file" || return 1
     theme_render_all
-    # Persist selection (used by firstboot re-apply)
     local sel="${TARGET_HOME:-$HOME}/.config/snowfox/theme"
     mkdir -p "$(dirname "$sel")"
     printf '%s\n' "$name" > "$sel"
-    # Live-reload foxdock if it's running (plan §2.3, §4)
     if command -v pkill >/dev/null 2>&1; then
         pkill -HUP -x foxdock 2>/dev/null || true
     fi
@@ -513,3 +466,4 @@ theme_reset() {
     local default="${1:-nightfox}"
     theme_apply "$default"
 }
+

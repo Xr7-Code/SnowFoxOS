@@ -1,0 +1,20 @@
+/* ============================================================
+ *  SnowFoxOS v4 — Rofi config
+ * ============================================================ */
+
+configuration {
+    modi: "drun,run,window";
+    show-icons: true;
+    icon-theme: "Papirus-Dark";
+    font: "JetBrainsMono Nerd Font 11";
+    terminal: "kitty";
+    drun-display-format: "{name}";
+    drun-match-fields:   "name,generic,exec,categories,keywords";
+    prompt: "  ";
+}
+
+@theme "snowfox"
+
+/* BEGIN SNOWFOX PALETTE */
+/* END SNOWFOX PALETTE */
+

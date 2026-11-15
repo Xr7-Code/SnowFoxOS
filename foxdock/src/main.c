@@ -2,10 +2,12 @@
  *  SnowFoxOS v4 — foxdock
  *  Vertical icon dock at the left edge, Xlib + Imlib2 only.
  * ============================================================ */
+#define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
+#include <X11/extensions/shape.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,8 +22,8 @@
 #include "draw.h"
 #include "launcher.h"
 
-#define DOCK_WIDTH_DEFAULT 64
 #define FALLBACK_PALETTE "/etc/snowfox/palette.conf"
+#define CORNER_RADIUS   8
 
 static volatile sig_atomic_t g_reload  = 0;
 static volatile sig_atomic_t g_quit    = 0;
@@ -54,6 +56,47 @@ static char *dock_conf_path(void) {
     return NULL;
 }
 
+/* Asymmetric rounded corners via XShape.
+ *
+ * The dock is anchored to the left screen edge, so the left corners
+ * stay square (flush with the edge). Only the right corners are
+ * rounded, because they float free.
+ *
+ *   ┌──────────╮
+ *   │          │
+ *   │          │
+ *   │          │
+ *   └──────────╯
+ *   ^          ^
+ *   square     round
+ */
+static void apply_rounded_corners(Display *dpy, Window win, int w, int h, int r) {
+    Pixmap mask = XCreatePixmap(dpy, win, (unsigned)w, (unsigned)h, 1);
+    GC gc = XCreateGC(dpy, mask, 0, NULL);
+
+    /* Everything invisible first */
+    XSetForeground(dpy, gc, 0);
+    XFillRectangle(dpy, mask, gc, 0, 0, (unsigned)w, (unsigned)h);
+
+    /* Visible: main rectangle without the right corners */
+    XSetForeground(dpy, gc, 1);
+    XFillRectangle(dpy, mask, gc, 0, 0,
+                   (unsigned)(w - r), (unsigned)h);              /* main body */
+    XFillRectangle(dpy, mask, gc, w - r, r,
+                   (unsigned)r, (unsigned)(h - 2*r));            /* right strip between the arcs */
+
+    /* Top-right arc */
+    XFillArc(dpy, mask, gc, w - r*2, 0,
+             r*2, r*2, 0*64, 90*64);
+    /* Bottom-right arc */
+    XFillArc(dpy, mask, gc, w - r*2, h - r*2,
+             r*2, r*2, 270*64, 90*64);
+
+    XShapeCombineMask(dpy, win, ShapeBounding, 0, 0, mask, ShapeSet);
+    XFreePixmap(dpy, mask);
+    XFreeGC(dpy, gc);
+}
+
 int main(void) {
     Display *dpy = XOpenDisplay(NULL);
     if (!dpy) {
@@ -61,7 +104,6 @@ int main(void) {
         return 1;
     }
     int screen = DefaultScreen(dpy);
-    int width  = DOCK_WIDTH_DEFAULT;
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -73,8 +115,16 @@ int main(void) {
     DockConfig cfg = {0};
     const char *conf = dock_conf_path();
     config_load(conf, &cfg);
+
+    /* Width: icon + 2*padding (no wasted space). */
+    int width  = cfg.icon_size + 2 * cfg.padding;
     int height = cfg.padding * 2 + cfg.n_entries * (cfg.icon_size + cfg.padding);
     if (height < 200) height = 200;
+
+    /* Vertical centering. */
+    int screen_height = DisplayHeight(dpy, screen);
+    int y_pos = (screen_height - height) / 2;
+    if (y_pos < 0) y_pos = 0;
 
     Palette pal;
     memset(&pal, 0, sizeof(pal));
@@ -88,12 +138,16 @@ int main(void) {
     attrs.event_mask = ExposureMask | ButtonPressMask |
                        EnterWindowMask | LeaveWindowMask | PointerMotionMask;
     Window win = XCreateWindow(dpy, DefaultRootWindow(dpy),
-                               0, 0, (unsigned)width, (unsigned)height, 0,
+                               0, y_pos, (unsigned)width, (unsigned)height, 0,
                                CopyFromParent, InputOutput, CopyFromParent,
                                CWOverrideRedirect | CWBackPixel | CWEventMask,
                                &attrs);
     XStoreName(dpy, win, "FoxDock");
 
+    /* Asymmetric rounded corners. */
+    apply_rounded_corners(dpy, win, width, height, CORNER_RADIUS);
+
+    /* _NET_WM_STRUT_PARTIAL: reserve space on the left edge. */
     long strut[12] = {0};
     strut[0]  = width;
     strut[4]  = 0;

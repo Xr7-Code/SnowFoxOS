@@ -3,36 +3,14 @@
 #  SnowFoxOS v4 — Phase Layer
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
-#  Central place for everything phase-specific:
-#   - CLI argument parsing (--phase <name>, --defaults)
-#   - phase -> module list mapping (phase_modules)
-#   - chroot / no-systemd guards (require_tty,
-#     require_systemd_session, systemd_safe)
-#   - target-user detection (detect_target_user)
-#   - the systemctl shim for the d-i chroot
-#     (install_chroot_systemctl_shim, moved here from v3
-#     install.sh — behaviour unchanged)
-#
-#  Valid phases (v4):
-#    full       interactive full install (default, unchanged)
-#    iso-base   chroot-safe base install
-#    iso-gpu    kernel/GPU phase (may exit 75)
-#    firstboot  live-session completion after first reboot
-#    extras     DEPRECATED alias -> warns + exit 0
-# ============================================================
 
+# Source-guard: safe to source repeatedly. The if-block form
+# keeps shellcheck happy (SC2317: no unreachable `return 0`).
 if [[ -n "${_SNOWFOX_PHASE_LOADED:-}" ]]; then
-    return 0 2>/dev/null || true
+    return 0 2>/dev/null
 fi
 _SNOWFOX_PHASE_LOADED=1
 
-# ── Argument parsing ─────────────────────────────────────────
-# Usage: phase_parse_args "$@"
-#   --phase <name>   set SNOWFOX_PHASE (validated)
-#   --phase=<name>   inline form
-#   --defaults       set SNOWFOX_DEFAULTS=true
-#   -h|--help        print usage and exit 0
-# Unknown options: usage to stderr + exit 1 (fail-closed).
 phase_usage() {
     cat <<'EOF'
 SnowFoxOS v4 installer
@@ -101,8 +79,6 @@ phase_parse_args() {
     export SNOWFOX_PHASE
     export SNOWFOX_DEFAULTS
 
-    # Backwards compatibility with v3 module code that reads
-    # SNOWFOX_UNATTENDED. Meaning: "no interactive prompts".
     if [[ "$SNOWFOX_PHASE" != "full" || "$SNOWFOX_DEFAULTS" == "true" ]]; then
         export SNOWFOX_UNATTENDED=true
     else
@@ -110,9 +86,12 @@ phase_parse_args() {
     fi
 }
 
-# ── Phase -> module list ─────────────────────────────────────
 # Prints the module list, one per line, in execution order.
 # install.sh sources lib/system_setup.sh once before the loop.
+#
+# NOTE: No "legacy-full" phase. browser_selection.sh,
+# mesh_module.sh and gaming_ai.sh were removed by plan §1 and
+# are not re-introduced here.
 phase_modules() {
     case "$1" in
         iso-base)
@@ -126,12 +105,8 @@ phase_modules() {
                 theming_finishing.sh \
                 cleanup_final.sh
             ;;
-        iso-gpu)
-            printf '%s\n' kernel_drivers.sh
-            ;;
-        firstboot)
-            printf '%s\n' firstboot.sh
-            ;;
+        iso-gpu)   printf '%s\n' kernel_drivers.sh ;;
+        firstboot) printf '%s\n' firstboot.sh ;;
         *)
             echo "phase_modules: unknown phase '$1'" >&2
             return 1
@@ -139,10 +114,6 @@ phase_modules() {
     esac
 }
 
-# ── Guards ───────────────────────────────────────────────────
-# require_tty: prompt safety.
-#   Interactive mode: abort if no TTY (can't prompt).
-#   Defaults mode: log + continue (auto-answers are fine).
 require_tty() {
     if [[ "${SNOWFOX_DEFAULTS:-false}" == "true" \
        || "${SNOWFOX_UNATTENDED:-false}" == "true" ]]; then
@@ -157,19 +128,14 @@ require_tty() {
     return 0
 }
 
-# require_systemd_session: true iff we are in a live systemd session.
-# Chroot checks use this; prompts use require_tty.
 require_systemd_session() {
     [[ -d /run/systemd/system ]]
 }
 
 # systemd_safe <verb> <unit>
 #   enable|disable|mask  -> always executed
-#   start|restart|reload -> downgraded to `enable` outside a
-#                           live systemd session
-#   daemon-reload        -> no-op outside a live systemd session
-# This is the high-level API; the low-level systemctl override
-# lives in install_chroot_systemctl_shim() further below.
+#   start|restart|reload -> downgraded to `enable` outside a live session
+#   daemon-reload        -> no-op outside a live session
 systemd_safe() {
     local verb="$1" unit="$2"
     case "$verb" in
@@ -197,10 +163,6 @@ systemd_safe() {
     esac
 }
 
-# ── Target user detection ────────────────────────────────────
-# Exports TARGET_USER and TARGET_HOME.
-#   Phase mode: UID 1000 must exist (else exit 1).
-#   Interactive: fall back to SUDO_USER/logname, then prompt.
 detect_target_user() {
     local phase="${SNOWFOX_PHASE:-full}"
     local user=""
@@ -230,17 +192,13 @@ detect_target_user() {
     export TARGET_HOME="$home"
 }
 
-# ── systemctl shim for the d-i chroot ────────────────────────
-# Moved verbatim (behaviour-preserving) from v3 install.sh.
-# Installs a `systemctl` shell function that maps the verbs a
-# live session would support onto ones that work without a
-# running systemd. No-op in a live session, so safe to call
-# unconditionally.
+# Moved verbatim from v3 install.sh. Installs a `systemctl` shell
+# function for the d-i chroot that maps start/restart onto enable.
 install_chroot_systemctl_shim() {
     [[ "${SNOWFOX_PHASE:-full}" == "full" ]] && return 0
     [[ -d /run/systemd/system ]] && return 0
 
-    # shellcheck disable=SC2317,SC2329  # invoked indirectly by modules
+    # shellcheck disable=SC2317,SC2329
     systemctl() {
         local action=""
         local -a units=()

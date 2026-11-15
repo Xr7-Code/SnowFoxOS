@@ -1,0 +1,13 @@
+[Unit]
+Description=SnowFoxOS first-boot completion (GPU/drivers retry)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/snowfox-installer/firstboot.sh
+RemainAfterExit=yes
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

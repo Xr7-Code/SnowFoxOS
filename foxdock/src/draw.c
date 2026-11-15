@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Tooltip primitive (kept; not wired into the main loop in v4.0) */
 static Window tip_win = 0;
 static GC     tip_gc  = 0;
 
@@ -71,6 +70,7 @@ static void draw_icon(DockDraw *d, const DockEntry *e, int idx, int y) {
         imlib_context_set_display(d->dpy);
         imlib_context_set_visual(DefaultVisual(d->dpy, d->screen));
         imlib_context_set_colormap(DefaultColormap(d->dpy, d->screen));
+        imlib_context_set_drawable(d->win);          /* ← NEU */
         Imlib_Image img = imlib_load_image(path);
         if (img) {
             imlib_context_set_image(img);
@@ -99,8 +99,8 @@ void draw_repaint(DockDraw *d, const DockConfig *cfg) {
     XFlush(d->dpy);
 }
 
-/* draw_tooltip is complete but NOT called from main.c in v4.0.
- * Wiring it up requires a ~500 ms hover timer (see README "Known issues"). */
+/* Kept for v4.1 — not wired into the event loop (see README). */
+__attribute__((unused))
 static void draw_tooltip(DockDraw *d, const char *text, int x, int y) {
     if (!tip_win) {
         XSetWindowAttributes attrs;

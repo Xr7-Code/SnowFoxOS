@@ -3,33 +3,21 @@
 #  SnowFoxOS v4 — Installer Entry Point
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
-#  Behaviour changes vs v3:
-#   - Argument parsing, phase mapping and guards moved into
-#     lib/phase.sh (single source of truth).
-#   - The default (no-arg) flow is BYTE-FOR-BYTE the same as
-#     v3: same module order, same env exports, same hooks —
-#     minus the three modules removed by plan §1
-#     (browser_selection.sh, mesh_module.sh, gaming_ai.sh).
-#   - --phase iso-base uses phase_modules() from phase.sh so
-#     the module list stays in one place.
-#   - --phase extras: deprecated alias -> warn + exit 0
-#     (handled inside phase_parse_args).
-#   - rc is declared explicitly (declare rc=0) instead of a
-#     shellcheck suppression.
+#  - DNS + DoT bootstrap runs FIRST (lib/dns_setup.sh) so apt
+#    calls never hang mid-installer.
+#  - Default no-arg flow: v3 module order minus the three
+#    modules removed by plan §1 (browser_selection, mesh_module,
+#    gaming_ai).
 # ============================================================
 
-# ── Basic checks before sourcing lib ─────────────────────────
 if [[ $EUID -ne 0 ]]; then
     echo "Please run with sudo: sudo bash install.sh"
     exit 1
 fi
 
-# Resolve symlinks so SCRIPT_DIR is the real directory.
 SCRIPT_DIR="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")")"
 export SCRIPT_DIR
 
-# Refuse to run from a directory writable by a non-root user
-# (supply-chain hardening, unchanged from v3).
 _owner_check() {
     local path="$1"
     local st
@@ -56,22 +44,21 @@ if [[ ! -r "$SCRIPT_DIR/lib/checksums.sh" ]]; then
     exit 1
 fi
 
-# ── Load utils and phase layer ──────────────────────────────
+# ── Load utils, phase layer, DNS bootstrap ─────────────────
 # shellcheck source=lib/utils.sh
 source "$SCRIPT_DIR/lib/utils.sh"
 # shellcheck source=lib/phase.sh
 source "$SCRIPT_DIR/lib/phase.sh"
+# shellcheck source=lib/dns_setup.sh
+source "$SCRIPT_DIR/lib/dns_setup.sh"
 
-# ── Parse args + establish phase env ────────────────────────
-# (--phase extras exits 0 here with a deprecation warning.)
 phase_parse_args "$@"
 
-# ── Debian version check ────────────────────────────────────
 if [[ ! -f /etc/debian_version ]] || ! grep -q "^12\." /etc/debian_version; then
     warn "This script is optimized for Debian 12 (Bookworm)."
 fi
 
-# ── APT policy (lean system, explicit packages only) ────────
+# ── APT policy (lean system, explicit packages only) ───────
 APT_POLICY="/etc/apt/apt.conf.d/99-snowfox"
 if [[ ! -f "$APT_POLICY" ]] || \
    ! grep -q 'APT::Install-Recommends "false"' "$APT_POLICY"; then
@@ -89,7 +76,14 @@ fi
 # ── Target user ────────────────────────────────────────────
 detect_target_user
 
-# ── DKMS hook bookkeeping (unchanged from v3) ──────────────
+# ── DNS + DoT bootstrap (before any apt install) ───────────
+# This is the FIRST network-dependent step. It installs resolved
+# if needed, writes the DoT config, and verifies name resolution.
+# If it fails, the installer still continues (apt may work from
+# cache, and the user can fix DNS later); the log makes it clear.
+configure_dns_and_dot || true
+
+# ── DKMS hook bookkeeping ─────────────────────────────────
 DKMS_HOOKS_FILE="/run/snowfox-dkms-hooks"
 cat > "$DKMS_HOOKS_FILE" <<'EOF'
 /etc/kernel/postinst.d/dkms
@@ -99,7 +93,7 @@ EOF
 chmod 0600 "$DKMS_HOOKS_FILE"
 export DKMS_HOOKS_FILE
 
-# ── Hardware flags (cheap early detection) ─────────────────
+# ── Hardware flags ────────────────────────────────────────
 export HAS_NVIDIA=false
 export HAS_AMD=false
 export HAS_INTEL=false
@@ -113,7 +107,6 @@ detect_hardware() {
     echo "$gpu_info" | grep -qi "nvidia" && HAS_NVIDIA=true
     echo "$gpu_info" | grep -qi "amd"    && HAS_AMD=true
     echo "$gpu_info" | grep -qi "intel"  && HAS_INTEL=true
-
     IS_LAPTOP=false
     [[ "$(cat /sys/class/dmi/id/chassis_type 2>/dev/null)" =~ ^(8|9|10|14)$ ]] && IS_LAPTOP=true
     ls /sys/class/power_supply/BAT* >/dev/null 2>&1 && IS_LAPTOP=true
@@ -121,7 +114,7 @@ detect_hardware() {
 }
 detect_hardware
 
-# ── Network state (ISO phases only) ────────────────────────
+# ── Network state (ISO phases only) ──────────────────────
 export SNOWFOX_NETWORK="online"
 if [[ "$SNOWFOX_PHASE" != "full" ]]; then
     if [[ -f /var/lib/snowfox/net-offline ]]; then
@@ -132,32 +125,28 @@ if [[ "$SNOWFOX_PHASE" != "full" ]]; then
     info "Network state for phase '$SNOWFOX_PHASE': $SNOWFOX_NETWORK"
 fi
 
-# ── Chroot systemctl shim (moved to phase.sh) ──────────────
+# ── Chroot systemctl shim ─────────────────────────────────
 install_chroot_systemctl_shim
 
-# ── Defaults for MIME-related module variables ─────────────
+# ── Defaults for MIME-related module variables ────────────
 export DEFAULT_BROWSER_DESKTOP="firefox-esr.desktop"
 export DEFAULT_EDITOR_DESKTOP="geany.desktop"
 export DEFAULT_FM_DESKTOP="pcmanfm.desktop"
 
-# ── system_setup functions (loaded once, before any module) ─
+# ── system_setup functions (loaded once, before modules) ──
 # shellcheck source=lib/system_setup.sh
 source "$SCRIPT_DIR/lib/system_setup.sh"
 
-# ── Module runner ──────────────────────────────────────────
 run_module() {
     local module="$1"
     # shellcheck disable=SC1090
     source "$SCRIPT_DIR/lib/$module"
 }
 
-# ── Flow ───────────────────────────────────────────────────
+# ── Flow ─────────────────────────────────────────────────
 declare rc=0
 
 if [[ "$SNOWFOX_PHASE" == "full" ]]; then
-    # Default path — unchanged order and set, as in v3, minus the
-    # modules removed by plan §1 (browser_selection, mesh_module,
-    # gaming_ai).
     source "$SCRIPT_DIR/lib/base_system.sh"
     source "$SCRIPT_DIR/lib/kernel_drivers.sh"
     source "$SCRIPT_DIR/lib/desktop_environment.sh"
@@ -168,7 +157,6 @@ if [[ "$SNOWFOX_PHASE" == "full" ]]; then
     source "$SCRIPT_DIR/lib/theming_finishing.sh"
     source "$SCRIPT_DIR/lib/cleanup_final.sh"
 else
-    # Phase-driven path. The module list lives in lib/phase.sh.
     while IFS= read -r mod; do
         [[ -z "$mod" ]] && continue
         run_module "$mod"

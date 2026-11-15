@@ -39,9 +39,8 @@ static int parse_raw(const char *path, RawPalette *r) {
 
     memset(r, 0, sizeof(*r));
     r->dark = 1;
-    /* Safe defaults in case some keys are missing */
-    copy_color("#2B2F38", r->bg,      sizeof(r->bg));
-    copy_color("#343945", r->bg2,     sizeof(r->bg2));
+    copy_color("#15161A", r->bg,      sizeof(r->bg));
+    copy_color("#1E2028", r->bg2,     sizeof(r->bg2));
     copy_color("#E5E9F0", r->fg,      sizeof(r->fg));
     copy_color("#8A919E", r->fg_dim,  sizeof(r->fg_dim));
     copy_color("#9B59B6", r->accent,  sizeof(r->accent));
@@ -77,7 +76,6 @@ static int parse_raw(const char *path, RawPalette *r) {
         else if (!strcmp(key, "status_yellow")) copy_color(val, r->status_yellow,sizeof(r->status_yellow));
         else if (!strcmp(key, "status_red"))    copy_color(val, r->status_red,   sizeof(r->status_red));
         else if (!strcmp(key, "status_orange")) copy_color(val, r->status_orange,sizeof(r->status_orange));
-        /* unknown keys ignored for forward-compat */
     }
     fclose(f);
     return 0;

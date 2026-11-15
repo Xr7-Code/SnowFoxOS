@@ -14,9 +14,6 @@ typedef struct {
     unsigned long status_green, status_yellow, status_red, status_orange;
 } Palette;
 
-/* Single entry point: parse the file, resolve to pixel values,
- * fill *out. Returns 0 on success, -1 on failure (file missing,
- * unreadable, or no display). */
 int palette_reload(Display *dpy, int screen, const char *path, Palette *out);
 
 #endif

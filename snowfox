@@ -13,7 +13,7 @@
 set -u
 set -o pipefail
 
-# Controlled environment (unchanged from v3)
+# ─── Controlled environment ─────────────────────────────────
 export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
 
@@ -21,13 +21,16 @@ readonly UNAME_BIN="/usr/bin/uname"
 readonly READLINK_BIN="/usr/bin/readlink"
 readonly DIRNAME_BIN="/usr/bin/dirname"
 
+# ─── Resolve script path (follow symlinks) ─────────────────
 _self_path="${BASH_SOURCE[0]}"
 if [[ -x "$READLINK_BIN" ]]; then
     _resolved=$("$READLINK_BIN" -f "$_self_path" 2>/dev/null) && _self_path="$_resolved"
 fi
 SCRIPT_DIR=$("$DIRNAME_BIN" "$_self_path")
 
+# ─── Locate CLI modules ────────────────────────────────────
 CLI_DIR="/usr/local/lib/snowfox/cli"
+
 if [[ ! -d "$CLI_DIR" ]]; then
     if [[ "${SNOWFOX_DEV:-0}" == "1" && -d "$SCRIPT_DIR/cli" ]]; then
         CLI_DIR="$SCRIPT_DIR/cli"
@@ -38,6 +41,7 @@ if [[ ! -d "$CLI_DIR" ]]; then
     fi
 fi
 
+# ─── Module loader (fail-closed) ───────────────────────────
 _cli_require() {
     local f="$CLI_DIR/$1"
     [[ -f "$f" && -r "$f" ]] || { printf '\033[0;31m[err]\033[0m missing: %s\n' "$f" >&2; exit 1; }
@@ -45,7 +49,7 @@ _cli_require() {
     source "$f" || { printf '\033[0;31m[err]\033[0m failed to load: %s\n' "$f" >&2; exit 1; }
 }
 
-# Modules (v4 set — removed: mesh, ai, music, immersion, node, tor)
+# ─── Load modules (v4 set) ─────────────────────────────────
 _cli_require utils.sh
 _cli_require help.sh
 _cli_require status.sh
@@ -101,10 +105,10 @@ case "${1:-}" in
     # Stash (package manager)
     stash)                cmd_stash "${@:2}" ;;
 
-    # Theme (top-level, §5)
+    # Theme (top-level)
     theme)                cmd_theme "${@:2}" ;;
 
-    # Wallpaper (top-level, §5)
+    # Wallpaper (top-level)
     wallpaper|wall)       cmd_wallpaper "${@:2}" ;;
 
     # Settings

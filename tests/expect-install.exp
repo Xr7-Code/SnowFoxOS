@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+# ============================================================
+#  SnowFoxOS v4 — Expect harness for the interactive installer
+#  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
+# ============================================================
+#  Usage:
+#    expect tests/expect-install.exp <serial-device>
+#    expect tests/expect-install.exp /dev/pts/3
+#
+#  Drives the interactive install.sh over a serial console.
+#  Answers every prompt with its default (mostly "n" for optional
+#  apps). Intended for CI-style smoke tests.
+# ============================================================
+
+set timeout 600
+set serial [lindex $argv 0]
+
+if { $serial eq "" } {
+    puts "usage: expect tests/expect-install.exp <serial-device>"
+    exit 1
+}
+
+spawn -open [open $serial w+]
+
+# Wait for the first prompt
+expect {
+    "Install VLC Media Player?" { send "n\r"; exp_continue }
+    "Install GIMP"              { send "n\r"; exp_continue }
+    "Install VSCodium"          { send "n\r"; exp_continue }
+    "Install OnlyOffice"        { send "n\r"; exp_continue }
+    "Choice \[1-3\]"            { send "1\r"; exp_continue }
+    "Install bluetui"           { send "n\r"; exp_continue }
+    "Username:"                 { send "testuser\r"; exp_continue }
+    "snowfox-setup"             { send "y\r"; exp_continue }
+    "installed successfully"    { puts "OK: installer finished"; exit 0 }
+    "FAILED"                    { puts "ERROR: installer failed"; exit 1 }
+    timeout                     { puts "ERROR: timeout"; exit 1 }
+    eof                         { puts "ERROR: unexpected EOF"; exit 1 }
+}

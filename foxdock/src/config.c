@@ -67,7 +67,6 @@ static void parse_desktop_file(const char *path, DockConfig *cfg) {
 
     if (nodisplay || !name[0] || !exec[0]) return;
 
-    /* Strip %u/%f/%U/%F field codes from Exec */
     char cleaned[512];
     size_t j = 0;
     for (size_t i = 0; exec[i] && j + 1 < sizeof(cleaned); i++) {
@@ -91,7 +90,7 @@ int config_load(const char *path, DockConfig *cfg) {
     cfg->icon_size = 32;
     cfg->padding   = 6;
 
-    FILE *f = fopen(path, "r");
+    FILE *f = path ? fopen(path, "r") : NULL;
     if (f) {
         char line[1024];
         while (fgets(line, sizeof(line), f)) {
@@ -107,7 +106,6 @@ int config_load(const char *path, DockConfig *cfg) {
                 continue;
             }
 
-            /* name;icon;exec */
             char *p1 = strchr(line, ';');
             if (!p1) continue;
             *p1 = '\0';

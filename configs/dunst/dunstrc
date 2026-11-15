@@ -1,0 +1,21 @@
+# ============================================================
+#  SnowFoxOS v4 — dunst config
+# ============================================================
+
+[global]
+    monitor = 0
+    follow = mouse
+    width = 300
+    height = 300
+    origin = top-right
+    offset = 10x50
+    frame_width = 1
+    frame_radius = 0
+    font = JetBrainsMono Nerd Font 10
+    markup = full
+    format = "<b>%s</b>\n%b"
+    alignment = left
+
+# BEGIN SNOWFOX PALETTE
+# END SNOWFOX PALETTE
+

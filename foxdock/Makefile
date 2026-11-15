@@ -1,7 +1,7 @@
 # SnowFoxOS v4 — foxdock
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra -Werror -std=c11
-PKGS     = x11 imlib2
+PKGS     = x11 xext imlib2
 PKG_CFLAGS := $(shell pkg-config --cflags $(PKGS))
 PKG_LIBS   := $(shell pkg-config --libs   $(PKGS))
 LDFLAGS ?=

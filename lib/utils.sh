@@ -3,33 +3,29 @@
 #  SnowFoxOS v4 — Installer Utils
 #  Copyright (c) 2026 Alexander Valentin Ludwig (Xr7-Code)
 # ============================================================
-#  Changes vs v3:
-#   - Idempotent source-guard (_SNOWFOX_UTILS_LOADED)
-#   - ask_install <prompt> [default=no]:
-#       * defaults-mode: auto-answers with the given default,
-#         logs "[default] <prompt>: <yes|no> (auto-answered)"
-#       * no explicit default in defaults-mode => "no" (skip)
-#       * interactive: unchanged [y/N] prompt, default N
-#   - Removed v3 regex-matching on prompt texts (Mesh/Launcher
-#     auto-install). v4 rule: no app recommendations; skip by
-#     default unless the caller passes default=yes.
-#   - SNOWFOX_DEFAULTS is honoured as well as SNOWFOX_UNATTENDED
-#     so existing module code keeps working during the refactor.
-# ============================================================
 
-# Idempotent source guard — safe to source repeatedly.
+# Source-guard: safe to source repeatedly. The if-block form
+# keeps shellcheck happy (SC2317: no unreachable `return 0`).
 if [[ -n "${_SNOWFOX_UTILS_LOADED:-}" ]]; then
-    return 0 2>/dev/null || true
+    return 0 2>/dev/null
 fi
 _SNOWFOX_UTILS_LOADED=1
 
+# shellcheck disable=SC2034  # exported for external consumers (install.sh, modules)
 PURPLE='\033[0;35m'
+# shellcheck disable=SC2034
 ORANGE='\033[0;33m'
+# shellcheck disable=SC2034
 GREEN='\033[0;32m'
+# shellcheck disable=SC2034
 RED='\033[0;31m'
+# shellcheck disable=SC2034
 GRAY='\033[0;37m'
+# shellcheck disable=SC2034
 CYAN='\033[0;36m'
+# shellcheck disable=SC2034
 BOLD='\033[1m'
+# shellcheck disable=SC2034
 RESET='\033[0m'
 
 info()    { echo -e "${PURPLE}${BOLD}[SnowFox]${RESET} $1"; }
@@ -43,11 +39,22 @@ step() {
     echo -e "${PURPLE}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 }
 
-# ask_install <prompt> [default=no]
-# Returns 0 (install) or 1 (skip).
-# In defaults/unattended mode the answer is deterministic:
-#   default=yes => 0 with log; anything else => 1 with log.
-# Interactive mode is unchanged: [y/N] prompt, default N.
+get_version() {
+    local dir="${1:-${SCRIPT_DIR:-}}"
+    local file="${dir:+$dir/}VERSION"
+    if [[ ! -r "$file" ]]; then
+        printf '0.0.0-unknown\n'
+        return 1
+    fi
+    local v
+    v="$(head -n1 "$file" | tr -d '[:space:]')"
+    if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-dev)?$ ]]; then
+        printf '0.0.0-invalid\n'
+        return 1
+    fi
+    printf '%s\n' "$v"
+}
+
 ask_install() {
     local prompt_text="$1"
     local default="${2:-no}"
@@ -57,7 +64,6 @@ ask_install() {
        || [[ ! -t 0 ]]; then
         unattended=true
     fi
-
     if $unattended; then
         case "$default" in
             yes|y|1)
@@ -70,9 +76,11 @@ ask_install() {
                 ;;
         esac
     fi
-
     echo ""
-    read -rp "$(echo -e "${PURPLE}${BOLD}"[SnowFox] Install "${prompt_text}"? [y/N]: "${RESET}")" choice
+    printf '%b[SnowFox] Install %s? [y/N]: %b' \
+        "${PURPLE}${BOLD}" "$prompt_text" "${RESET}"
+    local choice
+    read -r choice
     [[ "$choice" =~ ^[yY]$ ]]
 }
 
