@@ -4,11 +4,14 @@
 #  gpu / kill / air
 # ============================================================
 
+if [[ -n "${_SNOWFOX_CLI_HARDWARE_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
+_SNOWFOX_CLI_HARDWARE_LOADED=1
+
 cmd_gpu() {
     header "snowfox gpu"
     if ! command -v lspci >/dev/null 2>&1; then
         err "lspci not found"
-        return 1
+        return "$SNOWFOX_EXIT_ERROR"
     fi
     local gpu
     gpu=$(lspci 2>/dev/null | grep -iE 'vga|3d|display')
@@ -33,7 +36,7 @@ cmd_kill() {
             row_dot "Microphone" "$([[ $mic == on ]] && echo ok || echo err)" "$mic"
             row_dot "Webcam"     "$([[ $cam == on ]] && echo ok || echo err)" "$cam"
             ;;
-        *) err "usage: snowfox kill <mic|cam|all|restore>"; return 1 ;;
+        *) err "usage: snowfox kill <mic|cam|all|restore>"; return "$SNOWFOX_EXIT_ERROR" ;;
     esac
 }
 
@@ -60,8 +63,8 @@ _restore_devices() {
 cmd_air() {
     local mode="${1:-status}"
     case "$mode" in
-        on)  rfkill block all 2>/dev/null && ok "wireless off" || { err "rfkill failed"; return 1; } ;;
-        off) rfkill unblock all 2>/dev/null && ok "wireless on"  || { err "rfkill failed"; return 1; } ;;
+        on)  rfkill block all 2>/dev/null && ok "wireless off" || { err "rfkill failed"; return "$SNOWFOX_EXIT_ERROR"; } ;;
+        off) rfkill unblock all 2>/dev/null && ok "wireless on"  || { err "rfkill failed"; return "$SNOWFOX_EXIT_ERROR"; } ;;
         status|"")
             header "snowfox air"
             if command -v rfkill >/dev/null 2>&1; then
@@ -70,6 +73,6 @@ cmd_air() {
                 info "rfkill not installed"
             fi
             ;;
-        *) err "usage: snowfox air <on|off|status>"; return 1 ;;
+        *) err "usage: snowfox air <on|off|status>"; return "$SNOWFOX_EXIT_ERROR" ;;
     esac
 }
