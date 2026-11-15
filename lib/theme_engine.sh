@@ -32,9 +32,10 @@ theme_load() {
         fi
     done < "$file"
 
-    local req
+    local req var_name
     for req in ACCENT ACCENT2 ACCENT3 BG BG2 FG FG_DIM DARK; do
-        if [[ -z "${!THEME_${req}:-}" ]]; then
+        var_name="THEME_${req}"
+        if [[ -z "${!var_name:-}" ]]; then
             echo "theme_load: missing required key '${req,,}' in $file" >&2
             return 1
         fi
@@ -42,8 +43,9 @@ theme_load() {
 
     local c
     for c in ACCENT ACCENT2 ACCENT3 BG BG2 FG FG_DIM; do
-        if [[ ! "${!THEME_${c}}" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
-            echo "theme_load: '${c,,}' must be #RRGGBB, got '${!THEME_${c}}'" >&2
+        var_name="THEME_${c}"
+        if [[ ! "${!var_name}" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+            echo "theme_load: '${c,,}' must be #RRGGBB, got '${!var_name}'" >&2
             return 1
         fi
     done
@@ -54,34 +56,38 @@ theme_load() {
 
 _theme_derive_terminal() {
     local dark="${THEME_DARK:-true}"
-    : "${THEME_TERM_BG:=${THEME_BG}}"
-    : "${THEME_TERM_FG:=${THEME_FG}}"
-    : "${THEME_TERM_CURSOR:=${THEME_ACCENT}}"
+    
+    # Base term colors
+    if [[ -z "${THEME_TERM_BG:-}" ]]; then THEME_TERM_BG="${THEME_BG}"; fi
+    if [[ -z "${THEME_TERM_FG:-}" ]]; then THEME_TERM_FG="${THEME_FG}"; fi
+    if [[ -z "${THEME_TERM_CURSOR:-}" ]]; then THEME_TERM_CURSOR="${THEME_ACCENT}"; fi
     export THEME_TERM_BG THEME_TERM_FG THEME_TERM_CURSOR
 
     if [[ "$dark" == "true" ]]; then
-        : "${THEME_TERM_COLOR0:=${THEME_BG2}}"
-        : "${THEME_TERM_COLOR8:=${THEME_FG_DIM}}"
-        : "${THEME_TERM_COLOR7:=${THEME_FG}}"
-        : "${THEME_TERM_COLOR15:=${THEME_FG}}"
+        if [[ -z "${THEME_TERM_COLOR0:-}" ]]; then THEME_TERM_COLOR0="${THEME_BG2}"; fi
+        if [[ -z "${THEME_TERM_COLOR8:-}" ]]; then THEME_TERM_COLOR8="${THEME_FG_DIM}"; fi
+        if [[ -z "${THEME_TERM_COLOR7:-}" ]]; then THEME_TERM_COLOR7="${THEME_FG}"; fi
+        if [[ -z "${THEME_TERM_COLOR15:-}" ]]; then THEME_TERM_COLOR15="${THEME_FG}"; fi
     else
-        : "${THEME_TERM_COLOR0:=${THEME_FG_DIM}}"
-        : "${THEME_TERM_COLOR8:=${THEME_FG}}"
-        : "${THEME_TERM_COLOR7:=${THEME_BG2}}"
-        : "${THEME_TERM_COLOR15:=${THEME_BG}}"
+        if [[ -z "${THEME_TERM_COLOR0:-}" ]]; then THEME_TERM_COLOR0="${THEME_FG_DIM}"; fi
+        if [[ -z "${THEME_TERM_COLOR8:-}" ]]; then THEME_TERM_COLOR8="${THEME_FG}"; fi
+        if [[ -z "${THEME_TERM_COLOR7:-}" ]]; then THEME_TERM_COLOR7="${THEME_BG2}"; fi
+        if [[ -z "${THEME_TERM_COLOR15:-}" ]]; then THEME_TERM_COLOR15="${THEME_BG}"; fi
     fi
-    : "${THEME_TERM_COLOR1:=#BF616A}"
-    : "${THEME_TERM_COLOR2:=#A3BE8C}"
-    : "${THEME_TERM_COLOR3:=#EBCB8B}"
-    : "${THEME_TERM_COLOR4:=#81A1C1}"
-    : "${THEME_TERM_COLOR5:=${THEME_ACCENT}}"
-    : "${THEME_TERM_COLOR6:=#88C0D0}"
-    : "${THEME_TERM_COLOR9:=#D07A7F}"
-    : "${THEME_TERM_COLOR10:=#B1C89A}"
-    : "${THEME_TERM_COLOR11:=#E4CE91}"
-    : "${THEME_TERM_COLOR12:=#93B5CC}"
-    : "${THEME_TERM_COLOR13:=${THEME_ACCENT3}}"
-    : "${THEME_TERM_COLOR14:=#9BCAD8}"
+
+    if [[ -z "${THEME_TERM_COLOR1:-}" ]]; then THEME_TERM_COLOR1="#BF616A"; fi
+    if [[ -z "${THEME_TERM_COLOR2:-}" ]]; then THEME_TERM_COLOR2="#A3BE8C"; fi
+    if [[ -z "${THEME_TERM_COLOR3:-}" ]]; then THEME_TERM_COLOR3="#EBCB8B"; fi
+    if [[ -z "${THEME_TERM_COLOR4:-}" ]]; then THEME_TERM_COLOR4="#81A1C1"; fi
+    if [[ -z "${THEME_TERM_COLOR5:-}" ]]; then THEME_TERM_COLOR5="${THEME_ACCENT}"; fi
+    if [[ -z "${THEME_TERM_COLOR6:-}" ]]; then THEME_TERM_COLOR6="#88C0D0"; fi
+    if [[ -z "${THEME_TERM_COLOR9:-}" ]]; then THEME_TERM_COLOR9="#D07A7F"; fi
+    if [[ -z "${THEME_TERM_COLOR10:-}" ]]; then THEME_TERM_COLOR10="#B1C89A"; fi
+    if [[ -z "${THEME_TERM_COLOR11:-}" ]]; then THEME_TERM_COLOR11="#E4CE91"; fi
+    if [[ -z "${THEME_TERM_COLOR12:-}" ]]; then THEME_TERM_COLOR12="#93B5CC"; fi
+    if [[ -z "${THEME_TERM_COLOR13:-}" ]]; then THEME_TERM_COLOR13="${THEME_ACCENT3}"; fi
+    if [[ -z "${THEME_TERM_COLOR14:-}" ]]; then THEME_TERM_COLOR14="#9BCAD8"; fi
+    
     local i
     for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
         export "THEME_TERM_COLOR${i}"
@@ -466,4 +472,3 @@ theme_reset() {
     local default="${1:-nightfox}"
     theme_apply "$default"
 }
-
