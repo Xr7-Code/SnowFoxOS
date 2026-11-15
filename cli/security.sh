@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
 #  SnowFoxOS v4 — CLI: security (network audit)
-#  (v3 hardened parser, v4 design system)
 # ============================================================
 
 if [[ -n "${_SNOWFOX_CLI_SECURITY_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
@@ -11,13 +10,13 @@ export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 unset SHELL 2>/dev/null || true
 unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
 
-readonly SS_BIN="/usr/sbin/ss"
-readonly TIMEOUT_BIN="/usr/bin/timeout"
-readonly AWK_BIN="/usr/bin/awk"
-readonly GREP_BIN="/usr/bin/grep"
-readonly TR_BIN="/usr/bin/tr"
-readonly SED_BIN="/usr/bin/sed"
-readonly SLEEP_BIN="/usr/bin/sleep"
+SS_BIN="/usr/sbin/ss"
+TIMEOUT_BIN="/usr/bin/timeout"
+AWK_BIN="/usr/bin/awk"
+GREP_BIN="/usr/bin/grep"
+TR_BIN="/usr/bin/tr"
+SED_BIN="/usr/bin/sed"
+SLEEP_BIN="/usr/bin/sleep"
 
 [[ -x "$SS_BIN" ]]      || SS_BIN="/bin/ss"
 [[ -x "$TIMEOUT_BIN" ]] || TIMEOUT_BIN="/bin/timeout"
@@ -28,7 +27,7 @@ readonly SLEEP_BIN="/usr/bin/sleep"
 [[ -x "$SED_BIN" ]]     || SED_BIN="/bin/sed"
 [[ -x "$SLEEP_BIN" ]]   || SLEEP_BIN="/bin/sleep"
 
-readonly SS_TIMEOUT=10
+SS_TIMEOUT=10
 
 cmd_audit() {
     case "${1:-}" in
