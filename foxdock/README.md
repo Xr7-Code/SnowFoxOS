@@ -15,18 +15,49 @@ foxdock is to keep the process footprint tiny.
 ## Runtime contract
 
 - Reads `~/.config/snowfox/palette.conf` (written atomically by
-  `snowfox theme`, see `lib/theme_engine.sh`).
+  `snowfox theme` / `lib/theme_engine.sh`).
 - Reads `~/.config/foxdock/dock.conf` (`name;icon;exec` per line,
   optional `icon_size=NN` and `padding=NN` header keys).
-- If `dock.conf` is empty or missing, scans `/usr/share/applications`
-  with a minimal `.desktop` parser (Name/Icon/Exec/NoDisplay only —
-  no GLib).
-- Reacts to `SIGHUP` by reloading `palette.conf` and repainting.
-  No restart needed; this is how live theme switching works.
+  Defaults: `icon_size=32`, `padding=6`. Valid icon sizes are
+  32 and 48; any other value is honoured but not tuned for.
+- **Entry source is either/or, never both.** If `dock.conf` exists
+  and contains at least one `name;icon;exec` line, those entries
+  are the dock — no additional auto-scan happens. Only when
+  `dock.conf` is missing or yields zero entries does foxdock scan
+  `/usr/share/applications` with a minimal `.desktop` parser
+  (Name/Icon/Exec/NoDisplay only — no GLib). This avoids
+  duplicate icons and keeps the user's file authoritative.
 - Registers `_NET_WM_STRUT_PARTIAL` on the left edge so i3
-  reserves space automatically. No i3 rule is strictly required,
-  but the plan recommends:
+  reserves space automatically. This is the primary mechanism;
+  no i3 `for_window` rule is required for the space reservation.
+  The plan still recommends the sticky rule for cross-workspace
+  visibility:
   `for_window [class="FoxDock"] border none, sticky enable`.
+
+## SIGHUP contract (theme live-reload)
+
+`snowfox theme <name>` calls `pkill -HUP -x foxdock` after the
+palette has been written. foxdock treats every SIGHUP as a full
+reload of `~/.config/snowfox/palette.conf`, followed by a
+repaint. There is no restart, no session-bus round-trip.
+
+Two invariants that the reload path MUST honour, because
+`palette.conf` is written by an external process:
+
+1. **Idempotent.** Sending SIGHUP N times in a row leaves the
+   dock in the same state as sending it once. No accumulated
+   state, no leak, no double-registration.
+2. **Crash-safe.** A malformed, truncated, or half-written
+   `palette.conf` must never take foxdock down. On any parse
+   failure, `palette_reload()` returns non-zero and foxdock
+   keeps the currently loaded palette and continues running.
+   (The theme engine writes the file atomically via
+   `mktemp` + `mv`, so a real half-write should never be
+   observable — but the dock does not rely on that.)
+
+If the palette file is absent at startup, foxdock initialises
+with zeroed pixel values (black background) and stays alive.
+It is a comfort feature, not a critical component.
 
 ## Build
 
@@ -47,3 +78,9 @@ Requires `libx11-dev` and `libimlib2-dev`.
 ## Not in v4.0
 
 Window list, tray, drag & drop. Planned for v4.1 if needed.
+
+## Reference
+
+The `## Runtime contract` section above is the canonical
+description of foxdock's inputs and signals. `PROJECT_STRUCTURE.md`
+should link to it rather than duplicate it.
