@@ -17,9 +17,9 @@ if [[ -n "${_SNOWFOX_CLI_UTILS_LOADED:-}" ]]; then
 fi
 _SNOWFOX_CLI_UTILS_LOADED=1
 
-# ─── Colors ────────────────────────────────────────────────
-# Primary accent is read from palette.conf (fallback: nightfox).
+# ─── Palette-driven colors ─────────────────────────────────
 _PALETTE="${HOME}/.config/snowfox/palette.conf"
+
 _cli_palette_get() {
     local key="$1" fallback="$2"
     if [[ -r "$_PALETTE" ]]; then
@@ -31,21 +31,14 @@ _cli_palette_get() {
 }
 
 _hex_to_ansi_fg() {
-    # 24-bit truecolor foreground escape; falls back gracefully
     local h="${1#\#}"
     local r=$((16#${h:0:2})) g=$((16#${h:2:2})) b=$((16#${h:4:2}))
     printf '\033[38;2;%d;%d;%dm' "$r" "$g" "$b"
-}
-_hex_to_ansi_bg() {
-    local h="${1#\#}"
-    local r=$((16#${h:0:2})) g=$((16#${h:2:2})) b=$((16#${h:4:2}))
-    printf '\033[48;2;%d;%d;%dm' "$r" "$g" "$b"
 }
 
 ACCENT=$(_hex_to_ansi_fg "$(_cli_palette_get accent '#9B59B6')")
 FG=$(_hex_to_ansi_fg "$(_cli_palette_get fg '#E5E9F0')")
 FG_DIM=$(_hex_to_ansi_fg "$(_cli_palette_get fg_dim '#8A919E')")
-BG=$(_hex_to_ansi_fg "$(_cli_palette_get bg '#2B2F38')")
 
 GREEN=$(_hex_to_ansi_fg "$(_cli_palette_get status_green '#7FB069')")
 YELLOW=$(_hex_to_ansi_fg "$(_cli_palette_get status_yellow '#D4B86A')")
@@ -55,7 +48,7 @@ BOLD='\033[1m'
 DIM='\033[2m'
 RESET='\033[0m'
 
-# Legacy aliases — some modules still reference these.
+# Legacy aliases — kept so existing module bodies still resolve.
 PURPLE="$ACCENT"
 LPURPLE="$ACCENT$BOLD"
 ORANGE="$YELLOW"
@@ -64,33 +57,29 @@ GRAY="$FG_DIM"
 DGRAY="$FG_DIM"
 
 # ─── Output helpers ────────────────────────────────────────
-# header "snowfox status"
 header() {
     printf '\n%s%s  %s%s\n' "$ACCENT" "$BOLD" "$1" "$RESET"
-    printf '%s%s  %s%s\n' "$FG_DIM" "$(printf '─%.0s' $(seq 1 48))" "$RESET" ""
+    printf '%s  %s%s\n' "$FG_DIM" "$(printf '─%.0s' $(seq 1 48))" "$RESET"
 }
 
-# row "Label" "Value" [color]  — fixed 18-char label column
 row() {
     local label="$1" value="$2" color="${3:-$FG}"
     printf '  %s%-18s%s %s%s%s\n' "$FG_DIM" "$label" "$RESET" "$color" "$value" "$RESET"
 }
 
-# row_dot "Label" ok|warn|error "Value"
 row_dot() {
     local label="$1" state="$2" value="$3"
     local dot color
     case "$state" in
-        ok)    dot='●'; color="$GREEN"  ;;
-        warn)  dot='●'; color="$YELLOW" ;;
-        err)   dot='●'; color="$RED"    ;;
-        *)     dot='○'; color="$FG_DIM" ;;
+        ok)   dot='●'; color="$GREEN"  ;;
+        warn) dot='●'; color="$YELLOW" ;;
+        err)  dot='●'; color="$RED"    ;;
+        *)    dot='○'; color="$FG_DIM" ;;
     esac
     printf '  %s%-18s%s %s%s%s %s%s%s\n' \
         "$FG_DIM" "$label" "$RESET" "$color" "$dot" "$RESET" "$color" "$value" "$RESET"
 }
 
-# bool_row "Label" true|false
 bool_row() {
     if [[ "$2" == "true" ]]; then
         row_dot "$1" ok "on"
@@ -99,30 +88,25 @@ bool_row() {
     fi
 }
 
-# info / ok / warn / err — quiet, no decorative characters except
-# the ones above. warn/err go to stderr on purpose (see v3 note).
 info() { printf '  %s%s%s\n' "$FG_DIM" "$1" "$RESET"; }
-ok()   { printf '  %s%s%s %s\n' "$GREEN" "●" "$RESET" "$1"; }
-warn() { printf '  %s%s%s %s\n' "$YELLOW" "●" "$RESET" "$1" >&2; }
-err()  { printf '  %s%s%s %s\n' "$RED" "●" "$RESET" "$1" >&2; }
+ok()   { printf '  %s●%s %s\n' "$GREEN" "$RESET" "$1"; }
+warn() { printf '  %s●%s %s\n' "$YELLOW" "$RESET" "$1" >&2; }
+err()  { printf '  %s●%s %s\n' "$RED" "$RESET" "$1" >&2; }
 
-# divider — 48 chars, dim
 divider() {
     printf '  %s%s%s\n' "$FG_DIM" "$(printf '─%.0s' $(seq 1 48))" "$RESET"
 }
 
-# section "Title" — accent + divider
 section() {
     printf '\n  %s%s%s%s\n' "$ACCENT" "$BOLD" "$1" "$RESET"
     divider
 }
 
-# hint — subtle note under a row
 hint() {
     printf '  %s  %s%s\n' "$FG_DIM" "$1" "$RESET"
 }
 
-# ─── Progress bar (kept, no ASCII decoration) ──────────────
+# ─── Progress bar ──────────────────────────────────────────
 bar() {
     local val="${1:-0}" max="${2:-100}" width=20
     [[ "$max" -le 0 ]] && max=100
@@ -140,17 +124,21 @@ bar() {
 # ─── Spinner (only for actions > 2 s) ──────────────────────
 _SPIN_PID=""
 _SPIN_FRAMES=('·' '✻' '✽' '✶' '✳' '✢')
+
 spin_start() {
     local msg="${1:-Working...}"
-    ( local i=0
-      while true; do
-          printf "\r  %s%s%s  %s%s%s " "$ACCENT" "${_SPIN_FRAMES[$i]}" "$RESET" "$FG_DIM" "$msg" "$RESET"
-          i=$(( (i + 1) % ${#_SPIN_FRAMES[@]} ))
-          sleep 0.1
-      done ) &
+    (
+        local i=0
+        while true; do
+            printf "\r  %s%s%s  %s%s%s " "$ACCENT" "${_SPIN_FRAMES[$i]}" "$RESET" "$FG_DIM" "$msg" "$RESET"
+            i=$(( (i + 1) % ${#_SPIN_FRAMES[@]} ))
+            sleep 0.1
+        done
+    ) &
     _SPIN_PID=$!
     disown "$_SPIN_PID" 2>/dev/null || true
 }
+
 _spin_kill() {
     if [[ -n "$_SPIN_PID" ]]; then
         kill "$_SPIN_PID" 2>/dev/null
@@ -159,10 +147,11 @@ _spin_kill() {
         _SPIN_PID=""
     fi
 }
-spin_stop()  { _spin_kill; }
-spin_ok()    { _spin_kill; ok   "$1"; }
-spin_err()   { _spin_kill; err  "$1"; }
-spin_warn()  { _spin_kill; warn "$1"; }
+
+spin_stop() { _spin_kill; }
+spin_ok()   { _spin_kill; ok "$1"; }
+spin_err()  { _spin_kill; err "$1"; }
+spin_warn() { _spin_kill; warn "$1"; }
 
 # ─── Human-readable bytes ──────────────────────────────────
 human_bytes() {
@@ -174,7 +163,7 @@ human_bytes() {
     fi
 }
 
-# ─── Exit codes (single source of truth) ───────────────────
+# ─── Exit codes ────────────────────────────────────────────
 SNOWFOX_EXIT_OK=0
 SNOWFOX_EXIT_ERROR=1
 SNOWFOX_EXIT_NETWORK=75
