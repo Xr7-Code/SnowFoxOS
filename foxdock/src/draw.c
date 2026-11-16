@@ -23,6 +23,14 @@ void draw_init(DockDraw *d, Display *dpy, Window win, int width, int height,
     d->active_index = -1;
     d->pal = *pal;
     d->gc = XCreateGC(dpy, win, 0, NULL);
+
+    /* Imlib2 global context: display, visual and colormap are fixed for the
+     * lifetime of the dock.  Only the drawable is re-set per repaint because
+     * it must be current when imlib_render_image_on_drawable_at_size() is
+     * called (Imlib2 uses a single global context). */
+    imlib_context_set_display(dpy);
+    imlib_context_set_visual(DefaultVisual(dpy, d->screen));
+    imlib_context_set_colormap(DefaultColormap(dpy, d->screen));
 }
 
 static void draw_background(DockDraw *d) {
@@ -67,10 +75,7 @@ static void draw_icon(DockDraw *d, const DockEntry *e, int idx, int y) {
 
     char path[1024];
     if (resolve_icon_path(e->icon, path, sizeof(path)) == 0) {
-        imlib_context_set_display(d->dpy);
-        imlib_context_set_visual(DefaultVisual(d->dpy, d->screen));
-        imlib_context_set_colormap(DefaultColormap(d->dpy, d->screen));
-        imlib_context_set_drawable(d->win);          /* ← NEU */
+        imlib_context_set_drawable(d->win);
         Imlib_Image img = imlib_load_image(path);
         if (img) {
             imlib_context_set_image(img);

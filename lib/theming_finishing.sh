@@ -31,15 +31,11 @@ success "Distro identity set (v${VERSION})"
 mkdir -p "$CONFIG_DIR/xsettingsd"
 for version in "3.0" "4.0"; do
     mkdir -p "$CONFIG_DIR/gtk-$version"
+    # Minimal template: static keys come from theme_engine (_render_gtk_settings).
+    # Only the section header + markers go here so there is exactly one [Settings]
+    # group after rendering; a second header would be silently ignored by GLib.
     cat > "$CONFIG_DIR/gtk-$version/settings.ini" <<'GEOF'
 [Settings]
-gtk-theme-name=Arc-Dark
-gtk-icon-theme-name=Papirus-Dark
-gtk-font-name=Inter 11
-gtk-cursor-theme-name=Bibata-Modern-Classic
-gtk-cursor-theme-size=24
-gtk-application-prefer-dark-theme=1
-
 # BEGIN SNOWFOX PALETTE
 # END SNOWFOX PALETTE
 GEOF
@@ -56,6 +52,17 @@ fi
 if [[ -f "$SCRIPT_DIR/configs/gtkrc-2.0" ]]; then
     cp "$SCRIPT_DIR/configs/gtkrc-2.0" "$TARGET_HOME/.gtkrc-2.0"
     chown "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.gtkrc-2.0"
+    # Seed .gtkrc-2.0.mine with defaults so GTK2 apps work before the first
+    # theme_apply run.  theme_engine will overwrite this file on apply.
+    cat > "$TARGET_HOME/.gtkrc-2.0.mine" <<'GEOF'
+# SnowFoxOS — initial GTK2 defaults (overwritten by theme_apply)
+gtk-theme-name = "Arc-Dark"
+gtk-icon-theme-name = "Papirus-Dark"
+gtk-font-name = "Inter 11"
+gtk-cursor-theme-name = "Bibata-Modern-Classic"
+gtk-cursor-theme-size = 24
+GEOF
+    chown "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.gtkrc-2.0.mine"
 fi
 
 sudo -u "$TARGET_USER" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$TARGET_USER")/bus" \
@@ -69,11 +76,15 @@ if command -v papirus-folders &>/dev/null; then
 fi
 
 cat > "$CONFIG_DIR/xsettingsd/xsettingsd.conf" <<'XEOF'
-Net/ThemeName "Arc-Dark"
-Net/IconThemeName "Papirus-Dark"
-Gtk/CursorThemeName "Bibata-Modern-Classic"
-Gtk/CursorThemeSize 24
+# Theme-managed keys live in the SNOWFOX PALETTE block (written by theme_engine).
+# Keep only static settings here to avoid duplicate keys.
 Gtk/FontName "Inter 11"
+Net/EnableEventSounds 0
+Net/EnableInputFeedbackSounds 0
+Xft/Antialias 1
+Xft/Hinting 1
+Xft/HintStyle "hintslight"
+Xft/RGBA "rgb"
 
 # BEGIN SNOWFOX PALETTE
 # END SNOWFOX PALETTE

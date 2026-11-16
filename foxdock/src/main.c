@@ -147,11 +147,14 @@ int main(void) {
     /* Asymmetric rounded corners. */
     apply_rounded_corners(dpy, win, width, height, CORNER_RADIUS);
 
-    /* _NET_WM_STRUT_PARTIAL: reserve space on the left edge. */
+    /* _NET_WM_STRUT_PARTIAL: reserve only the dock's own slice of the left edge.
+     * strut[4]/strut[5] bound the reserved strip to [y_pos, y_pos+height-1].
+     * Claiming the full screen height would prevent WMs from tiling windows
+     * into the left side above and below the dock. */
     long strut[12] = {0};
     strut[0]  = width;
-    strut[4]  = 0;
-    strut[5]  = (long)DisplayHeight(dpy, screen) - 1;
+    strut[4]  = (long)y_pos;
+    strut[5]  = (long)(y_pos + height - 1);
     Atom strut_atom = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
     XChangeProperty(dpy, win, strut_atom, XA_CARDINAL, 32,
                     PropModeReplace, (unsigned char *)strut, 12);
