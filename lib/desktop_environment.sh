@@ -22,6 +22,20 @@ apt-get install -y \
     cups cups-bsd cups-client printer-driver-splix
 success "i3 desktop packages installed"
 
+# papirus-folders is not in the Apt repo — install from GitHub
+if command -v papirus-folders >/dev/null 2>&1; then
+    info "papirus-folders already installed"
+elif [[ "${SNOWFOX_NETWORK:-online}" == "offline" ]]; then
+    warn "Offline install: skipping papirus-folders"
+else
+    PAPIRUS_FOLDERS_URL="https://raw.githubusercontent.com/PapirusDevelopmentTeam/papirus-folders/master/install.sh"
+    if curl -sL "$PAPIRUS_FOLDERS_URL" | sh; then
+        success "papirus-folders installed"
+    else
+        warn "papirus-folders install failed — icon folder colors will not apply"
+    fi
+fi
+
 if [[ "${SNOWFOX_PHASE:-full}" != "full" && "${SNOWFOX_NETWORK:-online}" == "offline" ]]; then
     warn "Offline ISO install: clipnotify needs a git clone — skipping"
 elif [[ -z "${CLIPNOTIFY_COMMIT:-}" || "$CLIPNOTIFY_COMMIT" == "UNPINNED" ]]; then
