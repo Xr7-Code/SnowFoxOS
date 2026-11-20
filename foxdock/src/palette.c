@@ -53,8 +53,14 @@ static int parse_raw(const char *path, RawPalette *r) {
 
     char line[256];
     while (fgets(line, sizeof(line), f)) {
-        char *hash = strchr(line, '#');
-        if (hash && hash != line) *hash = '\0';
+        /* Strip inline comments: a '#' that is NOT part of a color value.
+         * Color values look like key=#RRGGBB, so '#' always follows '='.
+         * A comment '#' either starts the line (after whitespace) or
+         * appears after whitespace following the value. We only strip it
+         * when it is not immediately preceded by '='. */
+        char *p = line;
+        while (*p && isspace((unsigned char)*p)) p++;
+        if (*p == '#') { *p = '\0'; }   /* full-line comment */
         trim(line);
         if (!*line) continue;
         char *eq = strchr(line, '=');
