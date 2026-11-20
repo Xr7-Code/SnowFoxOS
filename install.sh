@@ -73,6 +73,10 @@ else
     info "APT policy already present: $APT_POLICY"
 fi
 
+# ── Locale & keyboard (full mode: interactive; phase: defaults) ────
+# shellcheck source=lib/locale_setup.sh
+source "$SCRIPT_DIR/lib/locale_setup.sh"
+
 # ── Target user ────────────────────────────────────────────
 detect_target_user
 

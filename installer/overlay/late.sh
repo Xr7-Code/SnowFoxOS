@@ -5,7 +5,9 @@
 # ============================================================
 #  Runs inside the target chroot (in-target), after d-i has
 #  finished. Called from the preseed late_command:
-#    cp -a /cdrom/snowfox /target/snowfox-install
+#    cp /cdrom/simple-cdd/snowfox-overlay.tar.gz /target/
+#    ; in-target mkdir -p /snowfox-install
+#    ; in-target tar -xzf /snowfox-overlay.tar.gz -C /snowfox-install
 #    ; in-target bash /snowfox-install/late.sh
 #
 #  Order:
@@ -48,6 +50,15 @@ fi
 # Locate overlay scripts — they sit next to this file
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Persist build metadata inside the installed system. firstboot and
+# incident reports use /etc/snowfox-build to identify the ISO build.
+if [[ -f "$HERE/build-stamp" ]]; then
+    install -m 0644 "$HERE/build-stamp" /etc/snowfox-build
+    echo "[late] build stamp installed: /etc/snowfox-build"
+else
+    echo "[late] WARNING: build-stamp missing from overlay" >&2
+fi
+
 run_step() {
     local script="$1"
     echo ""
@@ -65,7 +76,9 @@ run_step "10-apt-policy.sh" || { echo "[late] aborting"; exit 1; }
 run_step "20-base.sh"       || { echo "[late] aborting"; exit 1; }
 
 # 30-gpu.sh may exit 75 (no network). That is NOT fatal.
-if ! run_step "30-gpu.sh"; then
+if run_step "30-gpu.sh"; then
+    :
+else
     rc=$?
     if (( rc == 75 )); then
         echo "[late] 30-gpu.sh: network unavailable (exit 75) — firstboot will retry"

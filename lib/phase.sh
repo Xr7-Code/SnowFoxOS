@@ -96,6 +96,7 @@ phase_modules() {
     case "$1" in
         iso-base)
             printf '%s\n' \
+                locale_setup.sh \
                 base_system.sh \
                 desktop_environment.sh \
                 audio_terminal.sh \
