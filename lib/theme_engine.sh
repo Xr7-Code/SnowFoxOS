@@ -215,18 +215,23 @@ _theme_backup_flush() {
 _render_block() {
     local file="$1" begin="$2" end="$3" content="$4"
     if grep -qF "$begin" "$file" 2>/dev/null; then
-        awk -v b="$begin" -v e="$end" '
-            index($0,b){skip=1; next}
-            index($0,e){skip=0; next}
-            !skip
+        # Markers already exist — replace the block IN-PLACE so position is kept.
+        # This is critical for Polybar: [colors] must appear before the modules
+        # that reference ${colors.*}, otherwise references resolve to empty strings.
+        awk -v b="$begin" -v e="$end" -v newblock="$begin"$'\n'"$content"$'\n'"$end" '
+            index($0,b) { print newblock; skip=1; next }
+            index($0,e) { skip=0; next }
+            !skip        { print }
         ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+    else
+        # No markers yet — append at end of file (first run / new config file).
+        [[ -s "$file" ]] && tail -c1 "$file" | grep -q $'\n' || echo >> "$file"
+        {
+            echo "$begin"
+            echo "$content"
+            echo "$end"
+        } >> "$file"
     fi
-    [[ -s "$file" ]] && tail -c1 "$file" | grep -q $'\n' || echo >> "$file"
-    {
-        echo "$begin"
-        echo "$content"
-        echo "$end"
-    } >> "$file"
 }
 
 # ============================================================
