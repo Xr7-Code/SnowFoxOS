@@ -122,7 +122,10 @@ cmd_update() {
         # ── 2d. User configs (polybar, rofi, dunst, …) ──────
         #   Only overwrite files that also exist in the source tree; never
         #   touch user-customised files that have no source counterpart.
-        local target_home="${TARGET_HOME:-$HOME}"
+        # Resolve real user home — $HOME is /root when run via sudo
+        local _cfg_user="${SUDO_USER:-$(id -un)}"
+        local target_home="${TARGET_HOME:-$(getent passwd "$_cfg_user" 2>/dev/null | cut -d: -f6)}"
+        target_home="${target_home:-$HOME}"
         local config_dir="$target_home/.config"
         if [[ -d "$src_dir/configs" && -d "$config_dir" ]]; then
             info "Syncing config templates → $config_dir"
@@ -143,6 +146,25 @@ cmd_update() {
             _fix_script_permissions "$config_dir/scripts" \
                                     "$config_dir/polybar/scripts"
             ok "Config script permissions enforced"
+
+            # Re-apply the current theme so the palette block is written into
+            # the freshly copied config files (e.g. new polybar/config.ini needs
+            # a fresh [colors] block before it can resolve ${colors.primary}).
+            local saved_theme="nightfox"
+            [[ -f "$target_home/.config/snowfox/theme" ]] && \
+                saved_theme="$(head -n1 "$target_home/.config/snowfox/theme" | tr -d '[:space:]')"
+            local theme_engine="/usr/local/lib/snowfox/lib/theme_engine.sh"
+            [[ -f "$src_dir/lib/theme_engine.sh" ]] && \
+                theme_engine="$src_dir/lib/theme_engine.sh"
+            if [[ -f "$theme_engine" ]]; then
+                info "Re-applying theme '$saved_theme' to updated configs…"
+                sudo -u "$_cfg_user" \
+                    HOME="$target_home" \
+                    XDG_CONFIG_HOME="$target_home/.config" \
+                    bash -c "source '$theme_engine' && theme_apply '$saved_theme'" \
+                    && ok "Theme '$saved_theme' re-applied" \
+                    || warn "theme_apply failed — run 'snowfox theme $saved_theme' manually"
+            fi
         fi
 
         # ── 2e. foxdock rebuild & install ───────────────────
