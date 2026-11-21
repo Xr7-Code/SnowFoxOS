@@ -17,18 +17,11 @@ _SNOWFOX_CLI_SYSTEM_LOADED=1
 #   Returns "" when none of the above exist.
 # ---------------------------------------------------------------------------
 _snowfox_source_dir() {
-    local d
     # 1. Explicit override
     [[ -n "${SNOWFOX_SRC_DIR:-}" && -d "$SNOWFOX_SRC_DIR" ]] && { echo "$SNOWFOX_SRC_DIR"; return; }
-    # 2. Derive from this file's real path (resolve symlinks)
-    d="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)"
-    # Climb until we find install.sh (project root)
-    while [[ -n "$d" && "$d" != "/" ]]; do
-        d="$(dirname "$d")"
-        [[ -f "$d/install.sh" ]] && { echo "$d"; return; }
-    done
-    # 3. Standard installed location
-    [[ -d /usr/local/share/snowfox ]] && { echo "/usr/local/share/snowfox"; return; }
+    # 2. Standard location: ~/SnowFoxOS (source always lives in the home directory)
+    local home_src="${HOME}/SnowFoxOS"
+    [[ -d "$home_src" && -f "$home_src/install.sh" ]] && { echo "$home_src"; return; }
     echo ""
 }
 
