@@ -51,6 +51,9 @@ if [[ -f "$SCRIPT_DIR/configs/gtk-4.0/gtk.css" ]]; then
 fi
 if [[ -f "$SCRIPT_DIR/configs/gtkrc-2.0" ]]; then
     cp "$SCRIPT_DIR/configs/gtkrc-2.0" "$TARGET_HOME/.gtkrc-2.0"
+    # GTK2 does NOT expand ~ in include paths — rewrite to an absolute path.
+    sed -i "s|include \"~/.gtkrc-2.0.mine\"|include \"$TARGET_HOME/.gtkrc-2.0.mine\"|" \
+        "$TARGET_HOME/.gtkrc-2.0"
     chown "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.gtkrc-2.0"
     # Seed .gtkrc-2.0.mine with defaults so GTK2 apps work before the first
     # theme_apply run.  theme_engine will overwrite this file on apply.
@@ -123,6 +126,10 @@ if [[ -d "$SCRIPT_DIR/configs" ]]; then
     cp -r "$SCRIPT_DIR/configs/"* "$CONFIG_DIR/"
     rm -f "$CONFIG_DIR/snowfox/palette.conf"
     success "Configuration files copied"
+    # Ensure all shell scripts in configs are executable.
+    # This covers scripts/, polybar/scripts/, and any future subdirectories.
+    find "$CONFIG_DIR" -type f -name "*.sh" -exec chmod 0755 {} +
+    success "Config script permissions enforced (chmod +x *.sh)"
 fi
 
 if [[ -f "$SCRIPT_DIR/configs/foxdock/dock.conf" ]]; then
