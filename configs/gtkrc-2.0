@@ -1,4 +1,6 @@
 # SnowFoxOS v4 — GTK2
 # Theme settings live in .gtkrc-2.0.mine so the theme engine can overwrite
 # that file atomically without touching this one.
+# NOTE: GTK2 does NOT expand ~ in include paths — the installer rewrites this
+# line with the user's absolute home path (see theming_finishing.sh).
 include "~/.gtkrc-2.0.mine"
