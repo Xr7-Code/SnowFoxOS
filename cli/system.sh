@@ -190,6 +190,68 @@ cmd_update() {
         "$_perm_home/.config/scripts" \
         "$_perm_home/.config/polybar/scripts"
 
+    # ── 4. Reload running desktop components as the real user ───
+    # All signals and restarts must run in the user's session, not as root.
+    local _reload_user="${SUDO_USER:-}"
+    local _reload_home="$_perm_home"
+    if [[ -z "$_reload_user" ]]; then
+        _reload_user="$(id -un)"
+    fi
+
+    # Helper: run a command as the real user with their DISPLAY/DBUS env
+    _as_user() {
+        local uid
+        uid="$(id -u "$_reload_user" 2>/dev/null)" || return 1
+        local dbus_addr="unix:path=/run/user/${uid}/bus"
+        sudo -u "$_reload_user" \
+            DISPLAY="${DISPLAY:-:0}" \
+            DBUS_SESSION_BUS_ADDRESS="$dbus_addr" \
+            XDG_RUNTIME_DIR="/run/user/${uid}" \
+            HOME="$_reload_home" \
+            "$@"
+    }
+
+    info "Reloading desktop components for user: $_reload_user"
+
+    # foxdock — SIGHUP triggers palette reload
+    if _as_user pkill -HUP -x foxdock 2>/dev/null; then
+        ok "foxdock: palette reloaded"
+    fi
+
+    # xsettingsd — SIGHUP broadcasts GTK settings to all running GTK apps
+    if _as_user pkill -HUP -x xsettingsd 2>/dev/null; then
+        ok "xsettingsd: settings broadcast"
+    fi
+
+    # dunst — SIGUSR2 reloads config
+    if _as_user pkill -USR2 -x dunst 2>/dev/null; then
+        ok "dunst: config reloaded"
+    fi
+
+    # i3 — reload config in-place (no restart, keybindings + bar update)
+    if _as_user i3-msg reload 2>/dev/null; then
+        ok "i3: config reloaded"
+    fi
+
+    # picom — restart (no reload signal)
+    if _as_user pkill -x picom 2>/dev/null; then
+        sleep 0.5
+        _as_user picom --daemon 2>/dev/null &
+        ok "picom: restarted"
+    fi
+
+    # polybar — kill all instances, re-launch via the user's launch script
+    if _as_user pkill -x polybar 2>/dev/null; then
+        sleep 0.3
+        local launch_script="$_reload_home/.config/polybar/launch.sh"
+        if [[ -x "$launch_script" ]]; then
+            _as_user bash "$launch_script" &
+            ok "polybar: restarted via launch.sh"
+        else
+            ok "polybar: stopped (launch.sh not found — start manually)"
+        fi
+    fi
+
     ok "system updated"
 }
 
