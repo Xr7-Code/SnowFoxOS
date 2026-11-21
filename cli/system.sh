@@ -19,9 +19,20 @@ _SNOWFOX_CLI_SYSTEM_LOADED=1
 _snowfox_source_dir() {
     # 1. Explicit override
     [[ -n "${SNOWFOX_SRC_DIR:-}" && -d "$SNOWFOX_SRC_DIR" ]] && { echo "$SNOWFOX_SRC_DIR"; return; }
-    # 2. Standard location: ~/SnowFoxOS (source always lives in the home directory)
-    local home_src="${HOME}/SnowFoxOS"
-    [[ -d "$home_src" && -f "$home_src/install.sh" ]] && { echo "$home_src"; return; }
+    # 2. Standard location: /home/$SUDO_USER/SnowFoxOS
+    #    When run as root via sudo, $HOME is /root but the source lives in the
+    #    invoking user's home. Use $SUDO_USER → getent as fallback.
+    local real_user="${SUDO_USER:-}"
+    if [[ -z "$real_user" ]]; then
+        # Not via sudo — use the current user
+        real_user="$(id -un 2>/dev/null)"
+    fi
+    local real_home
+    real_home="$(getent passwd "$real_user" 2>/dev/null | cut -d: -f6)"
+    if [[ -n "$real_home" ]]; then
+        local home_src="$real_home/SnowFoxOS"
+        [[ -d "$home_src" && -f "$home_src/install.sh" ]] && { echo "$home_src"; return; }
+    fi
     echo ""
 }
 
