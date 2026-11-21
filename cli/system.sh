@@ -178,10 +178,17 @@ cmd_update() {
     fi
 
     # ── 3. Always enforce permissions on installed lib scripts ──
+    # Resolve the real user home (sudo sets $HOME to /root)
+    local _perm_home="${TARGET_HOME:-}"
+    if [[ -z "$_perm_home" ]]; then
+        local _perm_user="${SUDO_USER:-$(id -un)}"
+        _perm_home="$(getent passwd "$_perm_user" 2>/dev/null | cut -d: -f6)"
+        _perm_home="${_perm_home:-$HOME}"
+    fi
     _fix_script_permissions \
         /usr/local/lib/snowfox \
-        "${TARGET_HOME:-$HOME}/.config/scripts" \
-        "${TARGET_HOME:-$HOME}/.config/polybar/scripts"
+        "$_perm_home/.config/scripts" \
+        "$_perm_home/.config/polybar/scripts"
 
     ok "system updated"
 }
