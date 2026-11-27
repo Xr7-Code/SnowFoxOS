@@ -114,11 +114,19 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
     fprintf(stderr, "tooltip: idx=%d text='%s' font=%p fg=%#lx bg2=%#lx\n",
             idx, text, (void*)tip_font, d->pal.fg, d->pal.bg2);
 
-    /* --- Fenster + GC einmalig anlegen ------------------------------- */
+    /* --- Fenster + GC einmalig anlegen -------------------------------
+     * Wichtig: _NET_WM_WINDOW_TYPE_TOOLTIP, nicht DOCK.  i3 behandelt
+     * Dock-Fenster als statisch und rendert sie nach dem Mappen nicht
+     * neu -- der Text bliebe unsichtbar.  Als TOOLTIP rendert i3 das
+     * Fenster normal, und XDrawString wird sichtbar.
+     *
+     * background_pixel = None: Der X-Server fuellt das Fenster beim
+     * Mappen nicht selbst, sonst ueberschreibt er unseren Text, den
+     * wir nach dem Mappen zeichnen. */
     if (!tip_win) {
         XSetWindowAttributes attrs;
         attrs.override_redirect = True;
-        attrs.background_pixel  = d->pal.bg2;
+        attrs.background_pixel  = None;
         attrs.border_pixel      = d->pal.accent;
         attrs.event_mask        = ExposureMask;
         tip_win = XCreateWindow(d->dpy, DefaultRootWindow(d->dpy),
@@ -130,19 +138,19 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
         XStoreName(d->dpy, tip_win, "FoxDockTooltip");
 
         Atom type = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE", False);
-        Atom dock = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
+        Atom tip  = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE_TOOLTIP", False);
         XChangeProperty(d->dpy, tip_win, type, XA_ATOM, 32,
-                        PropModeReplace, (unsigned char *)&dock, 1);
+                        PropModeReplace, (unsigned char *)&tip, 1);
 
         tip_gc = XCreateGC(d->dpy, tip_win, 0, NULL);
     }
 
     /* --- Font laden (einmalig, ausserhalb des if-Blocks!) ------------
-     * Wichtig: XSetFont muss NACH dem Laden aufgerufen werden.  Steht der
-     * Block im if (!tip_win), wird beim ersten Aufruf kein Font gesetzt,
+     * XSetFont muss NACH dem Laden aufgerufen werden.  Steht der Block
+     * im if (!tip_win), wird beim ersten Aufruf kein Font gesetzt,
      * weil tip_font dann noch NULL ist -- und beim zweiten Aufruf wird
-     * XSetFont nicht mehr erreicht.  Ergebnis: GC ohne Font, XDrawString
-     * zeichnet unsichtbar. */
+     * XSetFont nicht mehr erreicht.  Ergebnis: GC ohne Font,
+     * XDrawString zeichnet unsichtbar. */
     if (!tip_font) {
         const char *font_names[] = {
             "6x13", "9x15", "fixed",
@@ -191,17 +199,21 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
 
     fprintf(stderr, "  position: x=%d y=%d icon_y=%d\n", x, y, icon_y);
 
-    /* --- Inhalt zeichnen --------------------------------------------- */
+    /* --- Mappen, dann zeichnen ---------------------------------------
+     * Erst mappen und synchronisieren, dann zeichnen.  So ist
+     * sichergestellt, dass der X-Server das Fenster nicht mehr mit
+     * background_pixel fuellt, nachdem wir gezeichnet haben. */
+    XMapRaised(d->dpy, tip_win);
+    XRaiseWindow(d->dpy, tip_win);
+    XSync(d->dpy, False);
+
     XSetForeground(d->dpy, tip_gc, d->pal.bg2);
     XFillRectangle(d->dpy, tip_win, tip_gc, 0, 0, (unsigned)w, (unsigned)h);
     XSetForeground(d->dpy, tip_gc, d->pal.fg);
     XDrawString(d->dpy, tip_win, tip_gc, 6, 4 + ascent, text, text_len);
+    XSync(d->dpy, False);
 
     fprintf(stderr, "  drew at y=%d w=%d h=%d\n", 4 + ascent, w, h);
-
-    XMapRaised(d->dpy, tip_win);
-    XRaiseWindow(d->dpy, tip_win);
-    XSync(d->dpy, False);
 }
 
 void draw_tooltip_hide(DockDraw *d) {
