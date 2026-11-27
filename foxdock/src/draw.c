@@ -5,9 +5,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <X11/Xatom.h>
 
 static Window tip_win = 0;
 static GC     tip_gc  = 0;
+static int    tip_w   = 0;
+static int    tip_h   = 0;
 
 void draw_init(DockDraw *d, Display *dpy, Window win, int width, int height,
                int icon_size, int padding, const Palette *pal) {
@@ -25,9 +28,7 @@ void draw_init(DockDraw *d, Display *dpy, Window win, int width, int height,
     d->gc = XCreateGC(dpy, win, 0, NULL);
 
     /* Imlib2 global context: display, visual and colormap are fixed for the
-     * lifetime of the dock.  Only the drawable is re-set per repaint because
-     * it must be current when imlib_render_image_on_drawable_at_size() is
-     * called (Imlib2 uses a single global context). */
+     * lifetime of the dock. */
     imlib_context_set_display(dpy);
     imlib_context_set_visual(DefaultVisual(dpy, d->screen));
     imlib_context_set_colormap(DefaultColormap(dpy, d->screen));
@@ -104,23 +105,67 @@ void draw_repaint(DockDraw *d, const DockConfig *cfg) {
     XFlush(d->dpy);
 }
 
-/* Kept for v4.1 — not wired into the event loop (see README). */
-__attribute__((unused))
-static void draw_tooltip(DockDraw *d, const char *text, int x, int y) {
+/* Tooltip-Fenster einmalig erzeugen und danach nur noch mappen/unmappen.
+ * Bei jedem Aufruf wird der Inhalt neu gezeichnet und die Groesse an den
+ * Text angepasst; das Fenster selbst wird nie zerstoert, solange der Dock
+ * lebt. Das verhindert Create/Destroy-Flackern bei schnellem Hover. */
+void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx,
+                  Window parent, int parent_y) {
+    if (idx < 0 || idx >= cfg->n_entries) return;
+    const char *text = cfg->entries[idx].name;
+    if (!text || !*text) text = cfg->entries[idx].exec;
+
+    int text_w = (int)strlen(text) * 7;   /* grobe Schaetzung, fixed font */
+    int w = text_w + 12;
+    int h = 22;
+
     if (!tip_win) {
         XSetWindowAttributes attrs;
         attrs.override_redirect = True;
         attrs.background_pixel  = d->pal.bg2;
+        attrs.border_pixel      = d->pal.accent;
+        attrs.event_mask        = ExposureMask;
         tip_win = XCreateWindow(d->dpy, DefaultRootWindow(d->dpy),
-                                x, y, 200, 24, 0,
+                                0, 0, (unsigned)w, (unsigned)h, 1,
                                 CopyFromParent, InputOutput, CopyFromParent,
-                                CWOverrideRedirect | CWBackPixel, &attrs);
+                                CWOverrideRedirect | CWBackPixel |
+                                CWBorderPixel | CWEventMask, &attrs);
         tip_gc = XCreateGC(d->dpy, tip_win, 0, NULL);
-        XSetForeground(d->dpy, tip_gc, d->pal.fg);
+        Atom type = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE", False);
+        Atom tip  = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE_TOOLTIP", False);
+        XChangeProperty(d->dpy, tip_win, type, XA_ATOM, 32,
+                        PropModeReplace, (unsigned char *)&tip, 1);
+        tip_w = w; tip_h = h;
     }
+
+    if (w != tip_w || h != tip_h) {
+        XMoveResizeWindow(d->dpy, tip_win, 0, 0, (unsigned)w, (unsigned)h);
+        tip_w = w; tip_h = h;
+    }
+
+    /* Position: rechts neben dem Icon, vertikal auf dessen Mitte. */
+    int icon_y = parent_y + d->padding + idx * (d->icon_size + d->padding);
+    int x = d->width + 4;
+    int y = icon_y + (d->icon_size - h) / 2;
+    int scr_h = DisplayHeight(d->dpy, d->screen);
+    if (y + h > scr_h) y = scr_h - h;
+    if (y < 0) y = 0;
+    XMoveWindow(d->dpy, tip_win, x, y);
+
+    XSetForeground(d->dpy, tip_gc, d->pal.bg2);
+    XFillRectangle(d->dpy, tip_win, tip_gc, 0, 0, (unsigned)w, (unsigned)h);
     XSetForeground(d->dpy, tip_gc, d->pal.fg);
-    XDrawString(d->dpy, tip_win, tip_gc, 4, 16, text, (int)strlen(text));
+    XDrawString(d->dpy, tip_win, tip_gc, 6, 15, text, (int)strlen(text));
+
     XMapRaised(d->dpy, tip_win);
+    XFlush(d->dpy);
+}
+
+void draw_tooltip_hide(DockDraw *d) {
+    if (tip_win) {
+        XUnmapWindow(d->dpy, tip_win);
+        XFlush(d->dpy);
+    }
 }
 
 void draw_cleanup(DockDraw *d) {
