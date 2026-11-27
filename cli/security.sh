@@ -6,7 +6,8 @@
 if [[ -n "${_SNOWFOX_CLI_SECURITY_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
 _SNOWFOX_CLI_SECURITY_LOADED=1
 
-export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+# export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 unset SHELL 2>/dev/null || true
 unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
 
