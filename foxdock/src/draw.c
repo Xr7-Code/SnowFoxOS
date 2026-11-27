@@ -28,8 +28,6 @@ void draw_init(DockDraw *d, Display *dpy, Window win, int width, int height,
     d->pal = *pal;
     d->gc = XCreateGC(dpy, win, 0, NULL);
 
-    /* Imlib2 global context: display, visual and colormap are fixed for the
-     * lifetime of the dock. */
     imlib_context_set_display(dpy);
     imlib_context_set_visual(DefaultVisual(dpy, d->screen));
     imlib_context_set_colormap(DefaultColormap(dpy, d->screen));
@@ -106,17 +104,16 @@ void draw_repaint(DockDraw *d, const DockConfig *cfg) {
     XFlush(d->dpy);
 }
 
-/* Tooltip-Fenster einmalig erzeugen und danach nur noch mappen/unmappen.
- * Bei jedem Aufruf wird der Inhalt neu gezeichnet und die Groesse an den
- * Text angepasst; das Fenster selbst wird nie zerstoert, solange der Dock
- * lebt. Das verhindert Create/Destroy-Flackern bei schnellem Hover. */
+/* Tooltip-Fenster einmalig erzeugen und danach nur noch mappen/unmappen. */
 void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
     if (idx < 0 || idx >= cfg->n_entries) return;
     const char *text = cfg->entries[idx].name;
     if (!text || !*text) text = cfg->entries[idx].exec;
     if (!text || !*text) return;
 
-    /* --- Fenster + GC einmalig anlegen ------------------------------- */
+    fprintf(stderr, "tooltip: idx=%d text='%s' font=%p fg=%#lx bg2=%#lx\n",
+            idx, text, (void*)tip_font, d->pal.fg, d->pal.bg2);
+
     if (!tip_win) {
         XSetWindowAttributes attrs;
         attrs.override_redirect = True;
@@ -130,11 +127,18 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
                                 CWBorderPixel | CWEventMask, &attrs);
         tip_gc = XCreateGC(d->dpy, tip_win, 0, NULL);
 
-        /* Font explizit setzen: XDrawString zeichnet mit dem GC-Font,
-         * und der Default-Font eines frischen GC ist nicht garantiert. */
-        tip_font = XLoadQueryFont(d->dpy, "fixed");
-        if (!tip_font) tip_font = XLoadQueryFont(d->dpy, "6x13");
-        if (!tip_font) tip_font = XLoadQueryFont(d->dpy, "9x15");
+        const char *font_names[] = {
+            "fixed", "6x13", "9x15",
+            "-*-fixed-*-*-*-*-*-*-*-*-*-*-*-*",
+            "-misc-fixed-*-*-*-*-13-*-*-*-*-*-*-*",
+            NULL
+        };
+        for (int i = 0; font_names[i] && !tip_font; i++) {
+            tip_font = XLoadQueryFont(d->dpy, font_names[i]);
+            if (tip_font) {
+                fprintf(stderr, "foxdock: tooltip font '%s' loaded\n", font_names[i]);
+            }
+        }
         if (tip_font) {
             XSetFont(d->dpy, tip_gc, tip_font->fid);
         } else {
@@ -147,7 +151,6 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
                         PropModeReplace, (unsigned char *)&tip, 1);
     }
 
-    /* --- Groesse an Text anpassen ------------------------------------ */
     int text_len = (int)strlen(text);
     int text_w   = tip_font ? XTextWidth(tip_font, text, text_len)
                             : text_len * 7;
@@ -156,12 +159,14 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
     int w = text_w + 12;
     int h = ascent + descent + 8;
 
+    fprintf(stderr, "  geometry: text_w=%d ascent=%d descent=%d w=%d h=%d\n",
+            text_w, ascent, descent, w, h);
+
     if (w != tip_w || h != tip_h) {
         XMoveResizeWindow(d->dpy, tip_win, 0, 0, (unsigned)w, (unsigned)h);
         tip_w = w; tip_h = h;
     }
 
-    /* --- Position: rechts neben dem Icon, vertikal zentriert --------- */
     int icon_y = parent_y + d->padding + idx * (d->icon_size + d->padding);
     int x = d->width + 4;
     int y = icon_y + (d->icon_size - h) / 2;
@@ -170,11 +175,14 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
     if (y < 0) y = 0;
     XMoveWindow(d->dpy, tip_win, x, y);
 
-    /* --- Inhalt zeichnen --------------------------------------------- */
+    fprintf(stderr, "  position: x=%d y=%d icon_y=%d\n", x, y, icon_y);
+
     XSetForeground(d->dpy, tip_gc, d->pal.bg2);
     XFillRectangle(d->dpy, tip_win, tip_gc, 0, 0, (unsigned)w, (unsigned)h);
     XSetForeground(d->dpy, tip_gc, d->pal.fg);
     XDrawString(d->dpy, tip_win, tip_gc, 6, 4 + ascent, text, text_len);
+
+    fprintf(stderr, "  drew at y=%d w=%d h=%d\n", 4 + ascent, w, h);
 
     XMapRaised(d->dpy, tip_win);
     XSync(d->dpy, False);
