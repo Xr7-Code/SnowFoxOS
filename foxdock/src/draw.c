@@ -125,6 +125,23 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
                                 CopyFromParent, InputOutput, CopyFromParent,
                                 CWOverrideRedirect | CWBackPixel |
                                 CWBorderPixel | CWEventMask, &attrs);
+
+        /* Name setzen, damit i3-Regeln greifen koennen. */
+        XStoreName(d->dpy, tip_win, "FoxDockTooltip");
+
+        /* _NET_WM_WINDOW_TYPE_TOOLTIP: manche WMs respektieren das. */
+        Atom type = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE", False);
+        Atom tip  = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE_TOOLTIP", False);
+        XChangeProperty(d->dpy, tip_win, type, XA_ATOM, 32,
+                        PropModeReplace, (unsigned char *)&tip, 1);
+
+        /* _NET_WM_STATE_ABOVE: i3 hebt das Fenster dann auch bei
+         * Override-Redirect-Fenstern an. */
+        Atom wm_state = XInternAtom(d->dpy, "_NET_WM_STATE", False);
+        Atom above    = XInternAtom(d->dpy, "_NET_WM_STATE_ABOVE", False);
+        XChangeProperty(d->dpy, tip_win, wm_state, XA_ATOM, 32,
+                        PropModeReplace, (unsigned char *)&above, 1);
+
         tip_gc = XCreateGC(d->dpy, tip_win, 0, NULL);
 
         const char *font_names[] = {
@@ -144,11 +161,6 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
         } else {
             fprintf(stderr, "foxdock: no usable X font for tooltip\n");
         }
-
-        Atom type = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE", False);
-        Atom tip  = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE_TOOLTIP", False);
-        XChangeProperty(d->dpy, tip_win, type, XA_ATOM, 32,
-                        PropModeReplace, (unsigned char *)&tip, 1);
     }
 
     int text_len = (int)strlen(text);
@@ -184,7 +196,10 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
 
     fprintf(stderr, "  drew at y=%d w=%d h=%d\n", 4 + ascent, w, h);
 
+    /* Mappen, explizit anheben, und synchronisieren. XMapRaised allein
+     * reicht unter i3 nicht, weil i3 seine Frames danach neu stapelt. */
     XMapRaised(d->dpy, tip_win);
+    XRaiseWindow(d->dpy, tip_win);
     XSync(d->dpy, False);
 }
 
