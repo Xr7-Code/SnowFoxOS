@@ -14,6 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <time.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -24,6 +25,7 @@
 
 #define FALLBACK_PALETTE "/etc/snowfox/palette.conf"
 #define CORNER_RADIUS   8
+#define TOOLTIP_DELAY_MS 500
 
 static volatile sig_atomic_t g_reload  = 0;
 static volatile sig_atomic_t g_quit    = 0;
@@ -33,6 +35,12 @@ static void on_sighup(int sig)  { (void)sig; g_reload  = 1; }
 static void on_sigterm(int sig) { (void)sig; g_quit    = 1; }
 static void on_sigint(int sig)  { (void)sig; g_quit    = 1; }
 static void on_expose(int sig)  { (void)sig; g_repaint = 1; }
+
+static long now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long)ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
+}
 
 static char *palette_path(void) {
     static char buf[1024];
@@ -74,21 +82,17 @@ static void apply_rounded_corners(Display *dpy, Window win, int w, int h, int r)
     Pixmap mask = XCreatePixmap(dpy, win, (unsigned)w, (unsigned)h, 1);
     GC gc = XCreateGC(dpy, mask, 0, NULL);
 
-    /* Everything invisible first */
     XSetForeground(dpy, gc, 0);
     XFillRectangle(dpy, mask, gc, 0, 0, (unsigned)w, (unsigned)h);
 
-    /* Visible: main rectangle without the right corners */
     XSetForeground(dpy, gc, 1);
     XFillRectangle(dpy, mask, gc, 0, 0,
-                   (unsigned)(w - r), (unsigned)h);              /* main body */
+                   (unsigned)(w - r), (unsigned)h);
     XFillRectangle(dpy, mask, gc, w - r, r,
-                   (unsigned)r, (unsigned)(h - 2*r));            /* right strip between the arcs */
+                   (unsigned)r, (unsigned)(h - 2*r));
 
-    /* Top-right arc */
     XFillArc(dpy, mask, gc, w - r*2, 0,
              r*2, r*2, 0*64, 90*64);
-    /* Bottom-right arc */
     XFillArc(dpy, mask, gc, w - r*2, h - r*2,
              r*2, r*2, 270*64, 90*64);
 
@@ -116,12 +120,10 @@ int main(void) {
     const char *conf = dock_conf_path();
     config_load(conf, &cfg);
 
-    /* Width: icon + 2*padding (no wasted space). */
     int width  = cfg.icon_size + 2 * cfg.padding;
     int height = cfg.padding * 2 + cfg.n_entries * (cfg.icon_size + cfg.padding);
     if (height < 200) height = 200;
 
-    /* Vertical centering. */
     int screen_height = DisplayHeight(dpy, screen);
     int y_pos = (screen_height - height) / 2;
     if (y_pos < 0) y_pos = 0;
@@ -134,23 +136,22 @@ int main(void) {
 
     XSetWindowAttributes attrs;
     attrs.override_redirect = True;
-    attrs.background_pixel  = pal.bg;
+    /* background_pixel = None + eigener Draw im Repaint verhindert
+     * Clear-Flackern zwischen Expose und erstem Icon-Draw. */
+    attrs.background_pixel  = None;
+    attrs.border_pixel      = 0;
     attrs.event_mask = ExposureMask | ButtonPressMask |
                        EnterWindowMask | LeaveWindowMask | PointerMotionMask;
     Window win = XCreateWindow(dpy, DefaultRootWindow(dpy),
                                0, y_pos, (unsigned)width, (unsigned)height, 0,
                                CopyFromParent, InputOutput, CopyFromParent,
-                               CWOverrideRedirect | CWBackPixel | CWEventMask,
+                               CWOverrideRedirect | CWBackPixel |
+                               CWBorderPixel | CWEventMask,
                                &attrs);
     XStoreName(dpy, win, "FoxDock");
 
-    /* Asymmetric rounded corners. */
     apply_rounded_corners(dpy, win, width, height, CORNER_RADIUS);
 
-    /* _NET_WM_STRUT_PARTIAL: reserve only the dock's own slice of the left edge.
-     * strut[4]/strut[5] bound the reserved strip to [y_pos, y_pos+height-1].
-     * Claiming the full screen height would prevent WMs from tiling windows
-     * into the left side above and below the dock. */
     long strut[12] = {0};
     strut[0]  = width;
     strut[4]  = (long)y_pos;
@@ -167,7 +168,10 @@ int main(void) {
     draw_repaint(&draw, &cfg);
 
     int hover = -1;
+    int tooltip_idx = -1;
+    long hover_since = 0;
     int running = 1;
+
     while (running) {
         while (XPending(dpy)) {
             XEvent ev;
@@ -175,26 +179,65 @@ int main(void) {
             if (ev.type == Expose && ev.xexpose.count == 0) {
                 draw_repaint(&draw, &cfg);
             } else if (ev.type == ButtonPress && ev.xbutton.button == Button1) {
+                if (tooltip_idx != -1) {
+                    tooltip_idx = -1;
+                    draw_tooltip_hide(&draw);
+                }
                 int y = ev.xbutton.y;
                 int idx = (y - cfg.padding) / (cfg.icon_size + cfg.padding);
                 if (idx >= 0 && idx < cfg.n_entries) {
                     launcher_run(cfg.entries[idx].exec, idx);
                 }
-            } else if (ev.type == MotionNotify || ev.type == EnterNotify) {
+            } else if (ev.type == MotionNotify) {
                 int y = ev.xmotion.y;
                 int idx = (y - cfg.padding) / (cfg.icon_size + cfg.padding);
-                if (idx >= 0 && idx < cfg.n_entries && idx != hover) {
+                if (idx < 0 || idx >= cfg.n_entries) idx = -1;
+
+                /* Nur repainten, wenn sich der Hover-Index wirklich ändert.
+                 * MotionNotify feuert sonst bei jedem Pixel und erzeugt
+                 * sichtbares Flackern durch wiederholtes Vollrepaint. */
+                if (idx != hover) {
                     hover = idx;
                     draw.hover_index = hover;
+                    hover_since = now_ms();
+                    if (tooltip_idx != -1) {
+                        tooltip_idx = -1;
+                        draw_tooltip_hide(&draw);
+                    }
+                    draw_repaint(&draw, &cfg);
+                }
+            } else if (ev.type == EnterNotify) {
+                if (ev.xcrossing.mode != NotifyNormal ||
+                    ev.xcrossing.detail == NotifyInferior)
+                    continue;
+                int y = ev.xcrossing.y;
+                int idx = (y - cfg.padding) / (cfg.icon_size + cfg.padding);
+                if (idx < 0 || idx >= cfg.n_entries) idx = -1;
+                if (idx != hover) {
+                    hover = idx;
+                    draw.hover_index = hover;
+                    hover_since = now_ms();
                     draw_repaint(&draw, &cfg);
                 }
             } else if (ev.type == LeaveNotify) {
+                if (ev.xcrossing.mode != NotifyNormal ||
+                    ev.xcrossing.detail == NotifyInferior)
+                    continue;
                 if (hover != -1) {
                     hover = -1;
                     draw.hover_index = -1;
+                    tooltip_idx = -1;
+                    draw_tooltip_hide(&draw);
                     draw_repaint(&draw, &cfg);
                 }
             }
+        }
+
+        /* Tooltip-Trigger: nur wenn der Hover stillsteht. */
+        if (hover >= 0 && tooltip_idx != hover &&
+            now_ms() - hover_since >= TOOLTIP_DELAY_MS) {
+            tooltip_idx = hover;
+            draw_tooltip(&draw, &cfg, hover, win, y_pos);
         }
 
         if (g_reload) {
@@ -204,7 +247,11 @@ int main(void) {
                 pal      = new_pal;
                 draw.pal = pal;
                 XSetWindowBackground(dpy, win, pal.bg);
-                XClearWindow(dpy, win);
+                /* Tooltip ggf. in alten Farben -> ausblenden. */
+                if (tooltip_idx != -1) {
+                    tooltip_idx = -1;
+                    draw_tooltip_hide(&draw);
+                }
                 draw_repaint(&draw, &cfg);
             }
         }
@@ -214,6 +261,7 @@ int main(void) {
         usleep(50000);
     }
 
+    draw_tooltip_hide(&draw);
     draw_cleanup(&draw);
     config_free(&cfg);
     XDestroyWindow(dpy, win);
