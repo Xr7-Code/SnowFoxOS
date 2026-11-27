@@ -6,7 +6,8 @@
 #  Structure (plan §5):
 #   - plain-text names are primary; aliases are listed after
 #   - theme / wallpaper are top-level
-#   - removed: mesh, ai, music, immersion, node, tor
+#   - ai is a launcher for the external snowfox-ai binary
+#   - removed: mesh, music, immersion, node, tor
 #   - exit codes: 0 ok, 1 error, 75 network unavailable
 # ============================================================
 
@@ -64,6 +65,7 @@ _cli_require theme.sh
 _cli_require wallpaper.sh
 _cli_require doctor.sh
 _cli_require snap.sh
+_cli_require ai.sh
 
 # ─── Version ──────────────────────────────────────────────
 case "${1:-}" in
@@ -110,6 +112,9 @@ case "${1:-}" in
 
     # Wallpaper (top-level)
     wallpaper|wall)       cmd_wallpaper "${@:2}" ;;
+
+    # AI (external binary launcher)
+    ai)                   cmd_ai "${@:2}" ;;
 
     # Settings
     set|settings)         cmd_settings "${@:2}" ;;
