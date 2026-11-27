@@ -174,8 +174,6 @@ cmd_update() {
                 if make -C "$src_dir/foxdock" -j"$(nproc)" 2>&1; then
                     if make -C "$src_dir/foxdock" install 2>&1; then
                         ok "foxdock rebuilt and installed"
-                        # Signal running instance to reload palette
-                        pkill -HUP -x foxdock 2>/dev/null || true
                     else
                         warn "foxdock install step failed"
                     fi
@@ -233,11 +231,67 @@ cmd_update() {
             "$@"
     }
 
+    # Helper: start a detached background process as the real user.
+    # setsid entkoppelt den Prozess von der aktuellen Session, nohup
+    # verhindert SIGHUP beim Schliessen des Terminals.
+    _as_user_detached() {
+        local uid
+        uid="$(id -u "$_reload_user" 2>/dev/null)" || return 1
+        local dbus_addr="unix:path=/run/user/${uid}/bus"
+        sudo -u "$_reload_user" \
+            DISPLAY="${DISPLAY:-:0}" \
+            DBUS_SESSION_BUS_ADDRESS="$dbus_addr" \
+            XDG_RUNTIME_DIR="/run/user/${uid}" \
+            HOME="$_reload_home" \
+            setsid nohup "$@" >/dev/null 2>&1 &
+    }
+
     info "Reloading desktop components for user: $_reload_user"
 
-    # foxdock — SIGHUP triggers palette reload
-    if _as_user pkill -HUP -x foxdock 2>/dev/null; then
-        ok "foxdock: palette reloaded"
+    # foxdock — nach Rebuild komplett neu starten, damit das neue
+    # Binary aktiv wird. SIGHUP allein laedt nur die Palette neu,
+    # nicht die ausfuehrbare Datei.
+    #
+    # Ablauf:
+    #   1. Laufende Instanz per SIGTERM beenden (sauberer Shutdown)
+    #   2. Kurz warten, bis der Prozess wirklich weg ist
+    #   3. Neue Instanz als der echte User starten
+    #
+    # Wenn foxdock vorher nicht lief, wird es trotzdem gestartet --
+    # ein Update soll den Dock in jedem Fall in den laufenden Zustand
+    # versetzen.
+    local foxdock_bin="/usr/local/bin/foxdock"
+    if [[ -x "$foxdock_bin" ]]; then
+        if _as_user pgrep -x foxdock >/dev/null 2>&1; then
+            info "foxdock: stopping running instance"
+            _as_user pkill -TERM -x foxdock 2>/dev/null || true
+            # Bis zu 2 s auf sauberes Ende warten
+            local _i
+            for _i in 1 2 3 4; do
+                _as_user pgrep -x foxdock >/dev/null 2>&1 || break
+                sleep 0.5
+            done
+            # Falls SIGTERM nicht gereicht hat: hart beenden
+            if _as_user pgrep -x foxdock >/dev/null 2>&1; then
+                warn "foxdock: SIGTERM ignored — sending SIGKILL"
+                _as_user pkill -KILL -x foxdock 2>/dev/null || true
+                sleep 0.3
+            fi
+        fi
+
+        # Neue Instanz starten — detached, damit sie den Update-Prozess
+        # ueberlebt.
+        info "foxdock: starting new instance"
+        _as_user_detached "$foxdock_bin"
+        sleep 1
+
+        if _as_user pgrep -x foxdock >/dev/null 2>&1; then
+            ok "foxdock: restarted"
+        else
+            warn "foxdock: failed to start — check DISPLAY/permissions"
+        fi
+    else
+        warn "foxdock binary not found at $foxdock_bin — skipping restart"
     fi
 
     # xsettingsd — SIGHUP broadcasts GTK settings to all running GTK apps
