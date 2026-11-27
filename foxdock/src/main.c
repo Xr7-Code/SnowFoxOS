@@ -64,20 +64,6 @@ static char *dock_conf_path(void) {
     return NULL;
 }
 
-/* Asymmetric rounded corners via XShape.
- *
- * The dock is anchored to the left screen edge, so the left corners
- * stay square (flush with the edge). Only the right corners are
- * rounded, because they float free.
- *
- *   ┌──────────╮
- *   │          │
- *   │          │
- *   │          │
- *   └──────────╯
- *   ^          ^
- *   square     round
- */
 static void apply_rounded_corners(Display *dpy, Window win, int w, int h, int r) {
     Pixmap mask = XCreatePixmap(dpy, win, (unsigned)w, (unsigned)h, 1);
     GC gc = XCreateGC(dpy, mask, 0, NULL);
@@ -134,10 +120,11 @@ int main(void) {
         fprintf(stderr, "foxdock: palette not found, using defaults\n");
     }
 
+    fprintf(stderr, "foxdock: palette fg=%#lx bg=%#lx bg2=%#lx accent=%#lx\n",
+            pal.fg, pal.bg, pal.bg2, pal.accent);
+
     XSetWindowAttributes attrs;
     attrs.override_redirect = True;
-    /* background_pixel = None + eigener Draw im Repaint verhindert
-     * Clear-Flackern zwischen Expose und erstem Icon-Draw. */
     attrs.background_pixel  = None;
     attrs.border_pixel      = 0;
     attrs.event_mask = ExposureMask | ButtonPressMask |
@@ -172,6 +159,9 @@ int main(void) {
     long hover_since = 0;
     int running = 1;
 
+    fprintf(stderr, "foxdock: ready, %d entries, dock at y=%d\n",
+            cfg.n_entries, y_pos);
+
     while (running) {
         while (XPending(dpy)) {
             XEvent ev;
@@ -193,9 +183,8 @@ int main(void) {
                 int idx = (y - cfg.padding) / (cfg.icon_size + cfg.padding);
                 if (idx < 0 || idx >= cfg.n_entries) idx = -1;
 
-                /* Nur repainten, wenn sich der Hover-Index wirklich ändert.
-                 * MotionNotify feuert sonst bei jedem Pixel und erzeugt
-                 * sichtbares Flackern durch wiederholtes Vollrepaint. */
+                fprintf(stderr, "motion y=%d idx=%d hover=%d\n", y, idx, hover);
+
                 if (idx != hover) {
                     hover = idx;
                     draw.hover_index = hover;
@@ -213,6 +202,7 @@ int main(void) {
                 int y = ev.xcrossing.y;
                 int idx = (y - cfg.padding) / (cfg.icon_size + cfg.padding);
                 if (idx < 0 || idx >= cfg.n_entries) idx = -1;
+                fprintf(stderr, "enter y=%d idx=%d hover=%d\n", y, idx, hover);
                 if (idx != hover) {
                     hover = idx;
                     draw.hover_index = hover;
@@ -223,6 +213,7 @@ int main(void) {
                 if (ev.xcrossing.mode != NotifyNormal ||
                     ev.xcrossing.detail == NotifyInferior)
                     continue;
+                fprintf(stderr, "leave hover=%d\n", hover);
                 if (hover != -1) {
                     hover = -1;
                     draw.hover_index = -1;
@@ -233,9 +224,10 @@ int main(void) {
             }
         }
 
-        /* Tooltip-Trigger: nur wenn der Hover stillsteht. */
         if (hover >= 0 && tooltip_idx != hover &&
             now_ms() - hover_since >= TOOLTIP_DELAY_MS) {
+            fprintf(stderr, "tooltip trigger: hover=%d tooltip_idx=%d elapsed=%ldms\n",
+                    hover, tooltip_idx, now_ms() - hover_since);
             tooltip_idx = hover;
             draw_tooltip(&draw, &cfg, hover, y_pos);
         }
@@ -247,7 +239,6 @@ int main(void) {
                 pal      = new_pal;
                 draw.pal = pal;
                 XSetWindowBackground(dpy, win, pal.bg);
-                /* Tooltip ggf. in alten Farben -> ausblenden. */
                 if (tooltip_idx != -1) {
                     tooltip_idx = -1;
                     draw_tooltip_hide(&draw);
