@@ -15,7 +15,9 @@ set -u
 set -o pipefail
 
 # ─── Controlled environment ─────────────────────────────────
-export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+# /usr/local/* comes first so locally installed binaries
+# (e.g. snowfox-ai) are found by `command -v`.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 unset LD_PRELOAD LD_LIBRARY_PATH 2>/dev/null || true
 
 readonly UNAME_BIN="/usr/bin/uname"
