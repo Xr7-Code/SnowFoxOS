@@ -7,10 +7,11 @@
 #include <string.h>
 #include <X11/Xatom.h>
 
-static Window tip_win = 0;
-static GC     tip_gc  = 0;
-static int    tip_w   = 0;
-static int    tip_h   = 0;
+static Window       tip_win  = 0;
+static GC           tip_gc   = 0;
+static XFontStruct *tip_font = NULL;
+static int          tip_w    = 0;
+static int          tip_h    = 0;
 
 void draw_init(DockDraw *d, Display *dpy, Window win, int width, int height,
                int icon_size, int padding, const Palette *pal) {
@@ -113,11 +114,9 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
     if (idx < 0 || idx >= cfg->n_entries) return;
     const char *text = cfg->entries[idx].name;
     if (!text || !*text) text = cfg->entries[idx].exec;
+    if (!text || !*text) return;
 
-    int text_w = (int)strlen(text) * 7;   /* grobe Schaetzung, fixed font */
-    int w = text_w + 12;
-    int h = 22;
-
+    /* --- Fenster + GC einmalig anlegen ------------------------------- */
     if (!tip_win) {
         XSetWindowAttributes attrs;
         attrs.override_redirect = True;
@@ -125,24 +124,44 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
         attrs.border_pixel      = d->pal.accent;
         attrs.event_mask        = ExposureMask;
         tip_win = XCreateWindow(d->dpy, DefaultRootWindow(d->dpy),
-                                0, 0, (unsigned)w, (unsigned)h, 1,
+                                0, 0, 1, 1, 1,
                                 CopyFromParent, InputOutput, CopyFromParent,
                                 CWOverrideRedirect | CWBackPixel |
                                 CWBorderPixel | CWEventMask, &attrs);
         tip_gc = XCreateGC(d->dpy, tip_win, 0, NULL);
+
+        /* Font explizit setzen: XDrawString zeichnet mit dem GC-Font,
+         * und der Default-Font eines frischen GC ist nicht garantiert. */
+        tip_font = XLoadQueryFont(d->dpy, "fixed");
+        if (!tip_font) tip_font = XLoadQueryFont(d->dpy, "6x13");
+        if (!tip_font) tip_font = XLoadQueryFont(d->dpy, "9x15");
+        if (tip_font) {
+            XSetFont(d->dpy, tip_gc, tip_font->fid);
+        } else {
+            fprintf(stderr, "foxdock: no usable X font for tooltip\n");
+        }
+
         Atom type = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE", False);
         Atom tip  = XInternAtom(d->dpy, "_NET_WM_WINDOW_TYPE_TOOLTIP", False);
         XChangeProperty(d->dpy, tip_win, type, XA_ATOM, 32,
                         PropModeReplace, (unsigned char *)&tip, 1);
-        tip_w = w; tip_h = h;
     }
+
+    /* --- Groesse an Text anpassen ------------------------------------ */
+    int text_len = (int)strlen(text);
+    int text_w   = tip_font ? XTextWidth(tip_font, text, text_len)
+                            : text_len * 7;
+    int ascent   = tip_font ? tip_font->ascent  : 11;
+    int descent  = tip_font ? tip_font->descent : 3;
+    int w = text_w + 12;
+    int h = ascent + descent + 8;
 
     if (w != tip_w || h != tip_h) {
         XMoveResizeWindow(d->dpy, tip_win, 0, 0, (unsigned)w, (unsigned)h);
         tip_w = w; tip_h = h;
     }
 
-    /* Position: rechts neben dem Icon, vertikal auf dessen Mitte. */
+    /* --- Position: rechts neben dem Icon, vertikal zentriert --------- */
     int icon_y = parent_y + d->padding + idx * (d->icon_size + d->padding);
     int x = d->width + 4;
     int y = icon_y + (d->icon_size - h) / 2;
@@ -151,24 +170,26 @@ void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
     if (y < 0) y = 0;
     XMoveWindow(d->dpy, tip_win, x, y);
 
+    /* --- Inhalt zeichnen --------------------------------------------- */
     XSetForeground(d->dpy, tip_gc, d->pal.bg2);
     XFillRectangle(d->dpy, tip_win, tip_gc, 0, 0, (unsigned)w, (unsigned)h);
     XSetForeground(d->dpy, tip_gc, d->pal.fg);
-    XDrawString(d->dpy, tip_win, tip_gc, 6, 15, text, (int)strlen(text));
+    XDrawString(d->dpy, tip_win, tip_gc, 6, 4 + ascent, text, text_len);
 
     XMapRaised(d->dpy, tip_win);
-    XFlush(d->dpy);
+    XSync(d->dpy, False);
 }
 
 void draw_tooltip_hide(DockDraw *d) {
     if (tip_win) {
         XUnmapWindow(d->dpy, tip_win);
-        XFlush(d->dpy);
+        XSync(d->dpy, False);
     }
 }
 
 void draw_cleanup(DockDraw *d) {
     if (d->gc) { XFreeGC(d->dpy, d->gc); d->gc = 0; }
     if (tip_gc) { XFreeGC(d->dpy, tip_gc); tip_gc = 0; }
+    if (tip_font) { XFreeFont(d->dpy, tip_font); tip_font = NULL; }
     if (tip_win) { XDestroyWindow(d->dpy, tip_win); tip_win = 0; }
 }
