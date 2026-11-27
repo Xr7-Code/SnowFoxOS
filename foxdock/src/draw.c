@@ -109,8 +109,7 @@ void draw_repaint(DockDraw *d, const DockConfig *cfg) {
  * Bei jedem Aufruf wird der Inhalt neu gezeichnet und die Groesse an den
  * Text angepasst; das Fenster selbst wird nie zerstoert, solange der Dock
  * lebt. Das verhindert Create/Destroy-Flackern bei schnellem Hover. */
-void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx,
-                  Window parent, int parent_y) {
+void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y) {
     if (idx < 0 || idx >= cfg->n_entries) return;
     const char *text = cfg->entries[idx].name;
     if (!text || !*text) text = cfg->entries[idx].exec;
