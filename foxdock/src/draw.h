@@ -22,8 +22,7 @@ typedef struct {
 void draw_init(DockDraw *d, Display *dpy, Window win, int width, int height,
                int icon_size, int padding, const Palette *pal);
 void draw_repaint(DockDraw *d, const DockConfig *cfg);
-void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx,
-                  Window parent, int parent_y);
+void draw_tooltip(DockDraw *d, const DockConfig *cfg, int idx, int parent_y);
 void draw_tooltip_hide(DockDraw *d);
 void draw_cleanup(DockDraw *d);
 
