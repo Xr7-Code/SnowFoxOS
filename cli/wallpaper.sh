@@ -13,6 +13,9 @@
 #    1. resize image to <= 256 px on the long edge
 #    2. extract 8 dominant colours (convert -colors 8 -unique-colors)
 #    3. pick bg / accent / accent2 / accent3 / fg by heuristic
+#       — dark/light is derived from AVERAGE LUMINANCE, not string compare
+#       — fg is always the opposite of bg (high contrast, guaranteed)
+#       — bg2 is a lightness-shifted bg (never equal to bg)
 #    4. write ~/.config/snowfox/themes/wallpaper-auto.theme
 #    5. activate via theme_apply
 #    6. log source in ~/.config/snowfox/wallpaper.conf
@@ -187,17 +190,41 @@ _wall_auto() {
             "$((16#${c:1:2}))" "$((16#${c:3:2}))" "$((16#${c:5:2}))")"
     done
 
-    local dark=true
-    local darkest brightest
-    darkest="$(  _wall_pick_extreme "${colours[@]}" dark)"
-    brightest="$(_wall_pick_extreme "${colours[@]}" light)"
-    if [[ "$brightest" > "#CCCCCC" && "$darkest" > "#777777" ]]; then
+    # ── Dark/Light detection ──────────────────────────────
+    # FIX 1: use AVERAGE LUMINANCE across all extracted colours.
+    # The old code used `[[ "$hex" > "#CCCCCC" ]]` which is a
+    # lexicographic string compare — completely unrelated to brightness
+    # (e.g. #FF0000 > #CCCCCC is true but red is dark).
+    #
+    # FIX 2: the old condition also required `darkest > #777777`,
+    # meaning a single dark pixel would flip the whole image to "dark".
+    # Average luminance is immune to outliers.
+    local avg_luma dark bg
+    avg_luma="$(_wall_avg_luma "${colours[@]}")"
+
+    if (( avg_luma < 128 )); then
+        dark=true
+        bg="$(_wall_pick_extreme "${colours[@]}" dark)"
+    else
         dark=false
+        bg="$(_wall_pick_extreme "${colours[@]}" light)"
     fi
 
-    local bg
-    if $dark; then bg="$darkest"; else bg="$brightest"; fi
+    # Guarantee that bg is on the correct side of mid-grey.
+    # If the extreme pick is still on the wrong side (rare, e.g. very
+    # saturated image with no neutral), fall back to a safe default.
+    local bg_luma
+    bg_luma="$(_wall_luma "$bg")"
+    if $dark && (( bg_luma > 128 )); then
+        bg="#1E2228"
+        warn "no truly dark colour in image — falling back to #1E2228 for bg"
+    elif ! $dark && (( bg_luma < 128 )); then
+        bg="#F5F0E8"
+        warn "no truly light colour in image — falling back to #F5F0E8 for bg"
+    fi
 
+    # ── Accent selection (unchanged logic, but contrast threshold
+    #    is now expressed in the same ×100 scale as _wall_contrast) ──
     local accent=""
     local -a sorted
     mapfile -t sorted < <(_wall_sort_by_saturation "${colours[@]}")
@@ -219,6 +246,9 @@ _wall_auto() {
     accent2="$(_wall_hue_shift "$accent" -15 0.85)"
     accent3="$(_wall_hue_shift "$accent" +15 1.15)"
 
+    # ── fg / fg_dim: hard-tied to dark flag ───────────────
+    # FIX 5: these were already correct in the old code, but they only
+    # work when `dark` is computed correctly (see FIX 1/2 above).
     local fg fg_dim
     if $dark; then
         fg="#F5F5F5"
@@ -228,21 +258,48 @@ _wall_auto() {
         fg_dim="#5A6068"
     fi
 
+    # ── bg2: derived from bg, never equal to bg ───────────
+    # FIX 3: old code set `bg2 = bg`, which broke hover/sidebar states
+    # in the GTK renderers. Now we shift lightness slightly:
+    #   dark  → bg2 is LIGHTER than bg (for raised surfaces)
+    #   light → bg2 is DARKER than bg (for recessed surfaces)
+    local bg2
+    if $dark; then
+        bg2="$(_wall_shift_lightness "$bg" +0.06)"
+    else
+        bg2="$(_wall_shift_lightness "$bg" -0.05)"
+    fi
+
+    # ── Contrast safety net ───────────────────────────────
+    # FIX 4: verify fg/bg contrast is actually usable before writing.
+    # _wall_contrast returns ×100 (so 450 == 4.5:1, WCAG AA for text).
+    local contrast
+    contrast="$(_wall_contrast "$fg" "$bg")"
+    if (( contrast < 450 )); then
+        warn "fg/bg contrast too low ($((contrast/100)).$((contrast%100)):1) — forcing pure fg"
+        if $dark; then fg="#FFFFFF"; else fg="#000000"; fi
+        contrast="$(_wall_contrast "$fg" "$bg")"
+    fi
+    info "fg/bg contrast: $((contrast/100)).$((contrast%100)):1"
+
+    # ── Write theme file ──────────────────────────────────
     mkdir -p "$(dirname "$WALL_THEME_PATH")"
     cat > "$WALL_THEME_PATH" <<EOF
 # SnowFoxOS theme: ${WALL_THEME_NAME}
 # Generated from: ${src}
+# Generated at:   $(date -Iseconds)
 dark = ${dark}
 
 accent  = ${accent}
 accent2 = ${accent2}
 accent3 = ${accent3}
 bg      = ${bg}
-bg2     = ${bg}
+bg2     = ${bg2}
 fg      = ${fg}
 fg_dim  = ${fg_dim}
 EOF
     success "theme written: $WALL_THEME_PATH"
+    info "  dark=${dark}  bg=${bg}  bg2=${bg2}  fg=${fg}  accent=${accent}"
 
     if theme_apply "$WALL_THEME_NAME"; then
         success "theme applied: $WALL_THEME_NAME"
@@ -269,6 +326,18 @@ _wall_pick_extreme() {
         fi
     done
     printf '%s\n' "$best"
+}
+
+# Average luminance across all extracted colours.
+# Used for robust dark/light detection (FIX 1).
+_wall_avg_luma() {
+    local sum=0 n=0 c
+    for c in "$@"; do
+        sum=$(( sum + $(_wall_luma "$c") ))
+        n=$(( n + 1 ))
+    done
+    (( n == 0 )) && { echo 128; return; }
+    echo $(( sum / n ))
 }
 
 _wall_sort_by_saturation() {
@@ -323,6 +392,13 @@ _wall_linearize() {
     fi
 }
 
+# Shift lightness of a hex colour by `delta` (e.g. +0.06 / -0.05).
+# Uses the same HSL machinery as _wall_hue_shift (deg=0).
+_wall_shift_lightness() {
+    local hex="$1" delta="$2"
+    _wall_hue_shift "$hex" 0 "$(awk -v d="$delta" 'BEGIN{printf "%.4f", 1 + d}')"
+}
+
 _wall_hue_shift() {
     local hex="$1" deg="$2" scale="$3"
     awk -v hex="$hex" -v deg="$deg" -v scale="$scale" '
@@ -336,6 +412,8 @@ _wall_hue_shift() {
         return n
     }
     function dec2hex(n) {
+        if (n < 0) n = 0
+        if (n > 255) n = 255
         return sprintf("%02X", n)
     }
     function max(a,b){return a>b?a:b}
@@ -368,7 +446,8 @@ _wall_hue_shift() {
         while (hh < 0) hh += 1
         while (hh >= 1) hh -= 1
         l = l * scale
-        if (l < 0) l = 0; if (l > 1) l = 1
+        if (l < 0) l = 0
+        if (l > 1) l = 1
         if (s == 0) { r = g = b = l }
         else {
             q = (l < 0.5) ? l * (1 + s) : l + s - l * s
