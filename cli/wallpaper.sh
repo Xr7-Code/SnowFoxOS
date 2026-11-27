@@ -6,16 +6,18 @@
 #  Subcommands:
 #    list                 list wallpapers in ~/Pictures/wallpapers
 #    set <path>           set wallpaper via feh
-#    auto <path>          derive a theme from the image, activate it
+#    auto <path>          derive a theme (incl. dark/light mode), activate it
 #    (no subcommand)      rofi picker: list + "auto" entry
 #
 #  auto (§3):
 #    1. resize image to <= 256 px on the long edge
 #    2. extract 8 dominant colours (convert -colors 8 -unique-colors)
-#    3. pick bg / accent / accent2 / accent3 / fg by heuristic
-#    4. write ~/.config/snowfox/themes/wallpaper-auto.theme
-#    5. activate via theme_apply
-#    6. log source in ~/.config/snowfox/wallpaper.conf
+#    3. detect dark/light mode from mean relative luma
+#    4. pick bg / fg / accent / accent2 / accent3 by heuristic
+#    5. write ~/.config/snowfox/themes/wallpaper-auto.theme
+#       (including `dark = true|false`)
+#    6. activate via theme_apply
+#    7. log source + mode in ~/.config/snowfox/wallpaper.conf
 # ============================================================
 
 if [[ -n "${_SNOWFOX_CLI_WALLPAPER_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
@@ -58,7 +60,7 @@ Usage: snowfox wallpaper [subcommand]
   (none) | gui   Rofi picker (wallpapers + "auto" toggle)
   list           list wallpapers in ~/Pictures/wallpapers
   set <path>     set the wallpaper via feh
-  auto <path>    derive a theme from the image and activate it
+  auto <path>    derive a theme (incl. dark/light mode) and activate it
 EOF
 }
 
@@ -187,24 +189,29 @@ _wall_auto() {
             "$((16#${c:1:2}))" "$((16#${c:3:2}))" "$((16#${c:5:2}))")"
     done
 
-    local dark=true
-    local darkest brightest
-    darkest="$(  _wall_pick_extreme "${colours[@]}" dark)"
-    brightest="$(_wall_pick_extreme "${colours[@]}" light)"
-    if [[ "$brightest" > "#CCCCCC" && "$darkest" > "#777777" ]]; then
-        dark=false
+    # ── 1. Mode-Erkennung ──────────────────────────────────
+    # Mittlere relative Luma aller extrahierten Farben entscheidet.
+    # Zusätzlich muss der Kontrast der Wahl stimmen, sonst kippen wir.
+    local mode dark
+    mode="$(_wall_detect_mode "${colours[@]}")"
+    if [[ "$mode" == "dark" ]]; then dark=true; else dark=false; fi
+    info "detected mode: $mode (mean rel-luma drives choice)"
+
+    # ── 2. bg passend zum Mode ─────────────────────────────
+    local bg
+    bg="$(_wall_pick_bg "$mode" "${colours[@]}")"
+    if [[ -z "$bg" ]]; then
+        if $dark; then bg="#111318"; else bg="#F4F4F6"; fi
+        warn "no colour matched $mode criteria — using fallback bg $bg"
     fi
 
-    local bg
-    if $dark; then bg="$darkest"; else bg="$brightest"; fi
-
+    # ── 3. accent: höchste Sättigung mit ausreichend Kontrast ─
     local accent=""
     local -a sorted
     mapfile -t sorted < <(_wall_sort_by_saturation "${colours[@]}")
-    local cand
+    local cand cr
     for cand in "${sorted[@]}"; do
         [[ "$cand" == "$bg" ]] && continue
-        local cr
         cr="$(_wall_contrast "$cand" "$bg")"
         if (( cr >= 300 )); then
             accent="$cand"; break
@@ -215,10 +222,12 @@ _wall_auto() {
         warn "no colour met contrast 3.0 vs bg — using active accent ($accent)"
     fi
 
+    # ── 4. Akzent-Varianten ────────────────────────────────
     local accent2 accent3
     accent2="$(_wall_hue_shift "$accent" -15 0.85)"
     accent3="$(_wall_hue_shift "$accent" +15 1.15)"
 
+    # ── 5. fg strikt an Mode ───────────────────────────────
     local fg fg_dim
     if $dark; then
         fg="#F5F5F5"
@@ -228,10 +237,12 @@ _wall_auto() {
         fg_dim="#5A6068"
     fi
 
+    # ── 6. Theme schreiben (inkl. dark = …) ────────────────
     mkdir -p "$(dirname "$WALL_THEME_PATH")"
     cat > "$WALL_THEME_PATH" <<EOF
 # SnowFoxOS theme: ${WALL_THEME_NAME}
 # Generated from: ${src}
+# detected mode: ${mode}
 dark = ${dark}
 
 accent  = ${accent}
@@ -242,17 +253,54 @@ bg2     = ${bg}
 fg      = ${fg}
 fg_dim  = ${fg_dim}
 EOF
-    success "theme written: $WALL_THEME_PATH"
+    success "theme written: $WALL_THEME_PATH (mode=${mode})"
 
     if theme_apply "$WALL_THEME_NAME"; then
-        success "theme applied: $WALL_THEME_NAME"
+        success "theme applied: $WALL_THEME_NAME ($mode)"
     else
         err "theme_apply failed"
         return 1
     fi
 
-    _wall_log_source "$src"
+    _wall_log_source "$src" "$mode"
     return 0
+}
+
+# ── Mode-Erkennung ─────────────────────────────────────────
+# Entscheidet anhand der mittleren relativen Luma (0..255-ish skaliert).
+# Schwelle 128 auf _wall_rel_luma-Skala (die liefert ~0..255).
+# Zusätzlich: wenn >60% der Farben klar hell sind → light,
+# wenn >60% klar dunkel sind → dark. Sonst Mittelwert.
+_wall_detect_mode() {
+    local -a cs=("$@")
+    local n=${#cs[@]}
+    (( n == 0 )) && { echo "dark"; return; }
+
+    local sum=0 v dark_count=0 light_count=0
+    local c
+    for c in "${cs[@]}"; do
+        v="$(_wall_rel_luma "$c")"
+        sum=$(( sum + v ))
+        (( v < 90 ))  && dark_count=$(( dark_count + 1 ))
+        (( v > 165 )) && light_count=$(( light_count + 1 ))
+    done
+    local mean=$(( sum / n ))
+
+    if (( dark_count * 100 / n >= 60 )); then echo "dark"; return; fi
+    if (( light_count * 100 / n >= 60 )); then echo "light"; return; fi
+    if (( mean < 128 )); then echo "dark"; else echo "light"; fi
+}
+
+# Wählt bg für den gewünschten Mode.
+# dark  → dunkelster Farbton, aber nicht zu nah an schwarz-only (max Kontrast zu fg)
+# light → hellster Farbton
+_wall_pick_bg() {
+    local mode="$1"; shift
+    if [[ "$mode" == "dark" ]]; then
+        _wall_pick_extreme dark "$@"
+    else
+        _wall_pick_extreme light "$@"
+    fi
 }
 
 # ── helpers ────────────────────────────────────────────────
@@ -382,12 +430,13 @@ _wall_hue_shift() {
 }
 
 _wall_log_source() {
-    local src="$1"
+    local src="$1" mode="${2:-}"
     mkdir -p "$(dirname "$WALL_CONF")"
     {
         echo "# SnowFoxOS wallpaper log"
         echo "# Rewritten on every successful set/auto"
         echo "source=$src"
+        [[ -n "$mode" ]] && echo "mode=$mode"
         echo "timestamp=$(date -Iseconds)"
         if [[ -f "$WALL_THEME_PATH" ]]; then
             echo "auto_theme=$WALL_THEME_PATH"
