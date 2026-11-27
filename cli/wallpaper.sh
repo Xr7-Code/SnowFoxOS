@@ -11,13 +11,16 @@
 #
 #  auto (§3):
 #    1. resize image to <= 256 px on the long edge
-#    2. extract 8 dominant colours (convert -colors 8 -unique-colors)
-#    3. detect dark/light mode from mean relative luma
-#    4. pick bg / fg / accent / accent2 / accent3 by heuristic
-#    5. write ~/.config/snowfox/themes/wallpaper-auto.theme
+#    2. extract 8 dominant colours WITH area weights (histogram)
+#    3. pick bg = neutral colour with largest area share
+#       → mode (dark/light) is derived from bg luma, not the other way round
+#    4. pick accent = most saturated colour with contrast >= 2.5 vs bg
+#    5. derive accent2/accent3 by hue shift
+#    6. fg / fg_dim strictly follow mode
+#    7. write ~/.config/snowfox/themes/wallpaper-auto.theme
 #       (including `dark = true|false`)
-#    6. activate via theme_apply
-#    7. log source + mode in ~/.config/snowfox/wallpaper.conf
+#    8. activate via theme_apply
+#    9. log source + mode in ~/.config/snowfox/wallpaper.conf
 # ============================================================
 
 if [[ -n "${_SNOWFOX_CLI_WALLPAPER_LOADED:-}" ]]; then return 0 2>/dev/null || true; fi
@@ -170,11 +173,21 @@ _wall_auto() {
         return 1
     fi
 
-    local -a colours=()
-    local line
+    # ── Farben + Flächenanteile (Histogramm) extrahieren ──
+    # convert … -colors 8 -format %c histogram:info:-
+    # Ausgabezeilen z.B.: "  12345: ( 12, 34, 56) #0C2238 srgb(12,34,56)"
+    local -a colours=() weights=()
+    local line count hex
     while IFS= read -r line; do
-        [[ "$line" =~ \#[0-9A-Fa-f]{6} ]] && colours+=("${BASH_REMATCH[0]^^}")
-    done < <(convert "$tmp" -colors 8 -unique-colors txt: 2>/dev/null)
+        # Anteil (erste Zahl vor ':')
+        count="$(sed -E 's/^[[:space:]]*([0-9]+):.*/\1/' <<<"$line")"
+        [[ "$count" =~ ^[0-9]+$ ]] || continue
+        # Hex
+        hex="$(grep -oE '#[0-9A-Fa-f]{6}' <<<"$line" | head -n1)"
+        [[ -n "$hex" ]] || continue
+        colours+=("${hex^^}")
+        weights+=("$count")
+    done < <(convert "$tmp" -colors 8 -format %c histogram:info:- 2>/dev/null)
     rm -f "$tmp"
 
     if [[ ${#colours[@]} -eq 0 ]]; then
@@ -182,30 +195,40 @@ _wall_auto() {
         return 1
     fi
 
-    info "extracted ${#colours[@]} colours"
-    local c
-    for c in "${colours[@]}"; do
-        printf '  %s  %s\n' "$c" "$(printf '\033[38;2;%d;%d;%dm████\033[0m' \
+    info "extracted ${#colours[@]} colours (with area weights)"
+    local i
+    for i in "${!colours[@]}"; do
+        local c="${colours[$i]}" w="${weights[$i]}"
+        printf '  %s  w=%-6s %s\n' "$c" "$w" "$(printf '\033[38;2;%d;%d;%dm████\033[0m' \
             "$((16#${c:1:2}))" "$((16#${c:3:2}))" "$((16#${c:5:2}))")"
     done
 
-    # ── 1. Mode-Erkennung ──────────────────────────────────
-    # Mittlere relative Luma aller extrahierten Farben entscheidet.
-    # Zusätzlich muss der Kontrast der Wahl stimmen, sonst kippen wir.
-    local mode dark
-    mode="$(_wall_detect_mode "${colours[@]}")"
-    if [[ "$mode" == "dark" ]]; then dark=true; else dark=false; fi
-    info "detected mode: $mode (mean rel-luma drives choice)"
-
-    # ── 2. bg passend zum Mode ─────────────────────────────
-    local bg
-    bg="$(_wall_pick_bg "$mode" "${colours[@]}")"
+    # ── 1. bg = neutraler Kandidat mit größtem Flächenanteil ──
+    # Neutral = Sättigung < 40. Fallback: alle Farben.
+    local bg=""
+    bg="$(_wall_pick_bg "${colours[@]}" -- "${weights[@]}")"
     if [[ -z "$bg" ]]; then
-        if $dark; then bg="#111318"; else bg="#F4F4F6"; fi
-        warn "no colour matched $mode criteria — using fallback bg $bg"
+        bg="$(_wall_pick_bg "${colours[@]}" -- "${weights[@]}" --all)"
+    fi
+    if [[ -z "$bg" ]]; then
+        # letzter Fallback: dunkelster/hellster je nach Mittelwert
+        local mean
+        mean="$(_wall_mean_rel_luma "${colours[@]}")"
+        if (( mean < 128 )); then bg="#111318"; else bg="#F4F4F6"; fi
+        warn "no neutral colour found — using fallback bg $bg"
     fi
 
-    # ── 3. accent: höchste Sättigung mit ausreichend Kontrast ─
+    # ── 2. Mode aus bg-Luma ableiten (NICHT umgekehrt!) ──
+    local bg_luma mode dark
+    bg_luma="$(_wall_rel_luma "$bg")"
+    if (( bg_luma < 128 )); then
+        mode="dark"; dark=true
+    else
+        mode="light"; dark=false
+    fi
+    info "bg=$bg (rel-luma=$bg_luma) → mode=$mode"
+
+    # ── 3. accent = gesättigtester Kandidat mit Kontrast >= 2.5 ──
     local accent=""
     local -a sorted
     mapfile -t sorted < <(_wall_sort_by_saturation "${colours[@]}")
@@ -213,14 +236,22 @@ _wall_auto() {
     for cand in "${sorted[@]}"; do
         [[ "$cand" == "$bg" ]] && continue
         cr="$(_wall_contrast "$cand" "$bg")"
-        if (( cr >= 300 )); then
+        if (( cr >= 250 )); then
             accent="$cand"; break
         fi
     done
+    # Zweiter Pass: nur Sättigung, wenn kein Kandidat 2.5 erreicht
+    if [[ -z "$accent" ]]; then
+        for cand in "${sorted[@]}"; do
+            [[ "$cand" == "$bg" ]] && continue
+            accent="$cand"; break
+        done
+    fi
     if [[ -z "$accent" ]]; then
         accent="${THEME_ACCENT:-#9B59B6}"
-        warn "no colour met contrast 3.0 vs bg — using active accent ($accent)"
+        warn "no accent candidate — using active accent ($accent)"
     fi
+    info "accent=$accent"
 
     # ── 4. Akzent-Varianten ────────────────────────────────
     local accent2 accent3
@@ -243,6 +274,7 @@ _wall_auto() {
 # SnowFoxOS theme: ${WALL_THEME_NAME}
 # Generated from: ${src}
 # detected mode: ${mode}
+# bg rel-luma: ${bg_luma}
 dark = ${dark}
 
 accent  = ${accent}
@@ -266,64 +298,46 @@ EOF
     return 0
 }
 
-# ── Mode-Erkennung ─────────────────────────────────────────
-# Entscheidet anhand der mittleren relativen Luma (0..255-ish skaliert).
-# Schwelle 128 auf _wall_rel_luma-Skala (die liefert ~0..255).
-# Zusätzlich: wenn >60% der Farben klar hell sind → light,
-# wenn >60% klar dunkel sind → dark. Sonst Mittelwert.
-_wall_detect_mode() {
-    local -a cs=("$@")
-    local n=${#cs[@]}
-    (( n == 0 )) && { echo "dark"; return; }
-
-    local sum=0 v dark_count=0 light_count=0
-    local c
-    for c in "${cs[@]}"; do
-        v="$(_wall_rel_luma "$c")"
-        sum=$(( sum + v ))
-        (( v < 90 ))  && dark_count=$(( dark_count + 1 ))
-        (( v > 165 )) && light_count=$(( light_count + 1 ))
-    done
-    local mean=$(( sum / n ))
-
-    if (( dark_count * 100 / n >= 60 )); then echo "dark"; return; fi
-    if (( light_count * 100 / n >= 60 )); then echo "light"; return; fi
-    if (( mean < 128 )); then echo "dark"; else echo "light"; fi
-}
-
-# Wählt bg für den gewünschten Mode.
-# dark  → dunkelster Farbton, aber nicht zu nah an schwarz-only (max Kontrast zu fg)
-# light → hellster Farbton
+# ── bg-Auswahl: neutral + größter Flächenanteil ────────────
+# Usage: _wall_pick_bg <colours...> -- <weights...> [--all]
+#   Farben und Gewichte sind durch "--" getrennt (gleiche Reihenfolge).
+#   --all überspringt den Neutral-Filter.
 _wall_pick_bg() {
-    local mode="$1"; shift
-    if [[ "$mode" == "dark" ]]; then
-        _wall_pick_extreme dark "$@"
-    else
-        _wall_pick_extreme light "$@"
-    fi
-}
+    local -a cols=() ws=()
+    local seen_sep=0 all=0
+    local a
+    for a in "$@"; do
+        if [[ "$a" == "--" ]]; then seen_sep=1; continue; fi
+        if [[ "$a" == "--all" ]]; then all=1; continue; fi
+        if (( seen_sep )); then ws+=("$a"); else cols+=("$a"); fi
+    done
 
-# ── helpers ────────────────────────────────────────────────
-_wall_pick_extreme() {
-    local mode="$1"; shift
-    local best="" best_val=-1 v
-    local c
-    for c in "$@"; do
-        v="$(_wall_luma "$c")"
-        if [[ "$mode" == "dark" ]]; then
-            if (( best_val < 0 || v < best_val )); then best="$c"; best_val=$v; fi
-        else
-            if (( v > best_val )); then best="$c"; best_val=$v; fi
+    local best="" best_w=-1
+    local i c w sat
+    for i in "${!cols[@]}"; do
+        c="${cols[$i]}"; w="${ws[$i]:-0}"
+        if (( ! all )); then
+            sat="$(_wall_saturation "$c")"
+            (( sat >= 40 )) && continue
         fi
+        if (( w > best_w )); then best="$c"; best_w=$w; fi
     done
     printf '%s\n' "$best"
 }
 
+# ── helpers ────────────────────────────────────────────────
 _wall_sort_by_saturation() {
     local c
     for c in "$@"; do
         printf '%s\t%d\n' "$c" "$(_wall_saturation "$c")"
     done | sort -k2 -nr | cut -f1
+}
+
+_wall_mean_rel_luma() {
+    local n=$# sum=0 c
+    (( n == 0 )) && { echo 0; return; }
+    for c in "$@"; do sum=$(( sum + $(_wall_rel_luma "$c") )); done
+    echo $(( sum / n ))
 }
 
 _wall_luma() {
