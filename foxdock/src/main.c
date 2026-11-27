@@ -237,7 +237,7 @@ int main(void) {
         if (hover >= 0 && tooltip_idx != hover &&
             now_ms() - hover_since >= TOOLTIP_DELAY_MS) {
             tooltip_idx = hover;
-            draw_tooltip(&draw, &cfg, hover, win, y_pos);
+            draw_tooltip(&draw, &cfg, hover, y_pos);
         }
 
         if (g_reload) {
